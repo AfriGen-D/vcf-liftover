@@ -10,11 +10,8 @@ hero:
     alt: VCF Liftover
   actions:
     - theme: brand
-      text: Quick Start →
-      link: /tutorials/quick-start
-    - theme: alt
-      text: Documentation
-      link: /docs/
+      text: Get Started
+      link: /guide/getting-started
     - theme: alt
       text: View on GitHub
       link: https://github.com/AfriGen-D/vcf-liftover
@@ -84,5 +81,5 @@ This Nextflow pipeline provides:
 ## Support ​
 
 - [GitHub Issues](https://github.com/AfriGen-D/vcf-liftover/issues)
-- [Helpdesk](https://afrigen-d.org)
+- [Helpdesk](https://helpdesk.afrigen-d.org)
 - [AfriGen-D](https://afrigen-d.org)

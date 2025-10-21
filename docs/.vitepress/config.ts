@@ -21,69 +21,14 @@ export default defineConfig({
   ],
 
   themeConfig: {
-    logo: {
-      src: '/logo.png',
-      width: 40,
-      height: 40,
-      alt: 'AfriGen-D VCF Liftover'
-    },
-    siteTitle: 'VCF Liftover',
-
-    // Add announcement banner
-    announcement: {
-      title: '🎉 New Quick Start Tutorial Available!',
-      details: 'Get started with VCF liftover in just 5 minutes',
-      link: '/tutorials/quick-start'
-    },
+    logo: '/logo.png',
 
     nav: [
-      { text: 'Home', link: '/', activeMatch: '^/$' },
-      {
-        text: 'Get Started',
-        activeMatch: '^/(guide|tutorials)/',
-        items: [
-          {
-            text: '🚀 Quick Start (10 min)',
-            link: '/tutorials/quick-start',
-            target: '_self'
-          },
-          {
-            text: '⚙️ Installation Guide',
-            link: '/guide/installation',
-            target: '_self'
-          },
-          {
-            text: '🔧 Configuration',
-            link: '/guide/configuration',
-            target: '_self'
-          },
-          {
-            text: '📋 Requirements',
-            link: '/guide/getting-started',
-            target: '_self'
-          }
-        ]
-      },
-      {
-        text: 'Documentation',
-        link: '/docs/',
-        activeMatch: '^/docs/'
-      },
-      {
-        text: 'Reference',
-        link: '/reference/',
-        activeMatch: '^/reference/'
-      },
-      {
-        text: 'Tutorials',
-        link: '/tutorials/',
-        activeMatch: '^/tutorials/'
-      },
-      {
-        text: 'Examples',
-        link: '/examples/',
-        activeMatch: '^/examples/'
-      }
+      { text: 'Home', link: '/' },
+      { text: 'Guide', link: '/guide/getting-started' },
+      { text: 'Parameters', link: '/reference/parameters' },
+      { text: 'Examples', link: '/examples/' },
+      { text: 'Workflow', link: '/workflow/' }
     ],
 
     sidebar: {
@@ -99,23 +44,23 @@ export default defineConfig({
           ]
         },
         {
-          text: 'Advanced Usage',
+          text: 'Pipeline Usage',
           collapsed: false,
           items: [
             { text: 'Input Files', link: '/guide/input-files' },
-            { text: 'Configuration', link: '/guide/configuration' }
+            { text: 'Running the Pipeline', link: '/guide/running' },
+            { text: 'Output Files', link: '/guide/output-files' },
+            { text: 'Troubleshooting', link: '/guide/troubleshooting' }
           ]
         }
       ],
       '/reference/': [
         {
-          text: 'Command Line Reference',
+          text: 'Reference',
           collapsed: false,
           items: [
-            { text: 'Reference Overview', link: '/reference/' },
             { text: 'Parameters', link: '/reference/parameters' },
             { text: 'Profiles', link: '/reference/profiles' },
-            { text: 'Test Data', link: '/reference/test-data' },
             { text: 'Configuration', link: '/reference/configuration' }
           ]
         }
@@ -129,45 +74,6 @@ export default defineConfig({
             { text: 'Process Flow', link: '/workflow/process-flow' },
             { text: 'Subworkflows', link: '/workflow/subworkflows' },
             { text: 'Resource Usage', link: '/workflow/resources' }
-          ]
-        }
-      ],
-      '/tutorials/': [
-        {
-          text: 'Step-by-Step Tutorials',
-          collapsed: false,
-          items: [
-            { text: 'Tutorial Overview', link: '/tutorials/' },
-            { text: 'Quick Start (10 min)', link: '/tutorials/quick-start' },
-            { text: 'Multi-File Tutorial', link: '/tutorials/multi-file-tutorial' },
-            { text: 'Method Selection', link: '/tutorials/method-selection' }
-          ]
-        }
-      ],
-      '/docs/': [
-        {
-          text: 'Core Concepts',
-          collapsed: false,
-          items: [
-            { text: 'Documentation Overview', link: '/docs/' },
-            { text: 'Liftover Methods', link: '/docs/liftover-methods' },
-            { text: 'Single File Analysis', link: '/docs/single-file' },
-            { text: 'Understanding Results', link: '/docs/understanding-results' }
-          ]
-        },
-        {
-          text: 'Processing Workflows',
-          collapsed: false,
-          items: [
-            { text: 'Multi-File Processing', link: '/docs/multi-file' },
-            { text: 'Quality Control', link: '/docs/quality-control' }
-          ]
-        },
-        {
-          text: 'Reference Materials',
-          collapsed: false,
-          items: [
-            { text: 'Troubleshooting', link: '/docs/troubleshooting' }
           ]
         }
       ]
@@ -184,8 +90,8 @@ export default defineConfig({
     ],
 
     footer: {
-      message: '🧬 Developed by <a href="https://github.com/AfriGen-D" target="_blank">AfriGen-D</a> • Released under the MIT License',
-      copyright: 'Copyright © 2025 AfriGen-D Project • African Genomics Research Initiative'
+      message: 'Released under the MIT License.',
+      copyright: 'Copyright © 2025 AfriGen-D Project'
     },
 
     search: {
