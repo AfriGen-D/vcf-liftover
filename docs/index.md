@@ -37,19 +37,20 @@ features:
     details: Extensive tutorials, examples, and reference materials with step-by-step guides for researchers and bioinformaticians.
 ---
 
-## Quick Start ​
-
-Get started with vcf-liftover in just a few commands:
+## Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/AfriGen-D/vcf-liftover.git
-cd vcf-liftover
+# Install Nextflow
+curl -s https://get.nextflow.io | bash
+
+# Run with test data
+nextflow run AfriGen-D/vcf-liftover -profile test,singularity --outdir results
 
 # Run with your data
-nextflow run main.nf \
-  --input your_file.vcf.gz \
+nextflow run AfriGen-D/vcf-liftover \
+  --input sample.vcf.gz \
   --target_fasta /path/to/GRCh38.fa \
+  --chain /path/to/hg19ToHg38.over.chain.gz \
   --outdir results \
   -profile singularity
 ```
