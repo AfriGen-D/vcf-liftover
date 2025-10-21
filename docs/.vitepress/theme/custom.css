@@ -1,0 +1,361 @@
+/**
+ * Custom styles for VCF Liftover documentation
+ * Enhances the header, navigation, and overall branding
+ */
+
+/* Header and Navigation Enhancements */
+.VPNav {
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%);
+  border-bottom: 2px solid #1d4ed8;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    transition: all 0.3s ease;
+  }
+  
+  .VPNav.scrolled {
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.25);
+    backdrop-filter: blur(20px);
+}
+
+.VPNavBar {
+  background: transparent;
+}
+
+.VPNavBarTitle .title {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+    position: relative;
+  }
+  
+  .VPNavBarTitle .title:hover {
+    transform: translateY(-1px);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+  
+  /* Add a subtle glow effect to the title */
+  .VPNavBarTitle .title::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+  }
+  
+  .VPNavBarTitle .title:hover::after {
+    opacity: 1;
+}
+
+.VPNavBarMenuLink {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+  transition: all 0.3s ease;
+  padding: 8px 16px;
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .VPNavBarMenuLink::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.VPNavBarMenuLink:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .VPNavBarMenuLink:hover::before {
+    left: 100%;
+  }
+  
+  /* Active state for navigation links */
+  .VPNavBarMenuLink.active {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Logo styling */
+.VPNavBarTitle .logo {
+  margin-right: 12px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Search button styling */
+.DocSearch-Button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.DocSearch-Button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Social links styling */
+.VPNavBarSocialLinks .VPSocialLink {
+  color: rgba(255, 255, 255, 0.8);
+  transition: all 0.3s ease;
+}
+
+.VPNavBarSocialLinks .VPSocialLink:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+}
+
+/* Dropdown menu styling */
+.VPNavBarMenuGroup .VPNavBarMenuGroupItem {
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Hero section enhancements */
+.VPHero .name {
+  background: linear-gradient(135deg, #1e40af, #3b82f6, #60a5fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 800;
+}
+
+.VPHero .tagline {
+  color: #64748b;
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+
+/* Feature cards styling */
+.VPFeature {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.VPFeature:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
+  transform: translateY(-2px);
+}
+
+.VPFeature .icon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+/* Code block enhancements */
+.vp-code-group .tabs {
+  background: #1e293b;
+  border-radius: 8px 8px 0 0;
+}
+
+.vp-code-group .tabs input:checked + label {
+  background: #3b82f6;
+  color: white;
+}
+
+/* Custom badge styling */
+.custom-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  margin-left: 0.5rem;
+}
+
+/* Footer enhancements */
+.VPFooter {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  border-top: 2px solid #3b82f6;
+}
+
+.VPFooter .message a {
+  color: #60a5fa;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.VPFooter .message a:hover {
+  color: #93c5fd;
+  text-decoration: underline;
+}
+
+/* Breadcrumb Navigation */
+.breadcrumb {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.875rem;
+}
+
+.breadcrumb-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breadcrumb-item {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.breadcrumb-item:not(:last-child)::after {
+  content: '›';
+  margin-left: 8px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.breadcrumb-link {
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.breadcrumb-link:hover {
+  color: white;
+}
+
+.breadcrumb-current {
+  color: white;
+  font-weight: 500;
+}
+
+/* Mobile Navigation Improvements */
+.VPNavBarHamburger {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.VPNavBarHamburger:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.VPNavBarHamburger .hamburger {
+  color: white;
+}
+
+/* Mobile Menu Overlay */
+.VPNavScreenMenu {
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+  backdrop-filter: blur(20px);
+}
+
+.VPNavScreenMenuLink {
+  color: rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.VPNavScreenMenuLink:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .VPNavBarTitle .title {
+    font-size: 1rem;
+  }
+
+  .VPHero .name {
+    font-size: 2.5rem;
+  }
+
+  .VPHero .tagline {
+    font-size: 1.1rem;
+  }
+.breadcrumb {
+  padding: 6px 16px;
+  font-size: 0.8rem;
+}
+
+.VPNav {
+  padding: 0 16px;
+}
+}
+
+@media (max-width: 480px) {
+  .VPNavBarTitle .title {
+    display: none;
+  }
+
+  .VPNavBarTitle .logo {
+    margin-right: 0;
+  }
+}
+
+/* Dark mode adjustments */
+.dark .VPNav {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+  border-bottom-color: #475569;
+}
+
+.dark .VPFeature {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  border-color: #475569;
+}
+
+.dark .VPFeature:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 8px 25px rgba(96, 165, 250, 0.25);
+}
+
+/* Animation for logo */
+@keyframes logoGlow {
+  0%, 100% { box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); }
+  50% { box-shadow: 0 4px 16px rgba(59, 130, 246, 0.5); }
+}
+
+.VPNavBarTitle .logo:hover {
+  animation: logoGlow 2s ease-in-out infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+}

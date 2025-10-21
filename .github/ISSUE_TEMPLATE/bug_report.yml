@@ -1,0 +1,142 @@
+name: Bug Report
+description: Report a bug to help us improve VCF Liftover
+title: "[Bug] "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out this form completely to help us understand and fix the issue.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission checklist
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have tested with the latest version
+          required: true
+        - label: I have read the documentation
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug
+      placeholder: Describe what happened...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior
+      placeholder: |
+        1. Run command '...'
+        2. With input file '...'
+        3. See error
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen
+      placeholder: Describe the expected result...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened
+      placeholder: Describe what actually occurred...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Information about your system and software versions
+      value: |
+        - OS: [e.g., Ubuntu 20.04, macOS 12.0, CentOS 7]
+        - Nextflow version: [e.g., 23.04.0]
+        - VCF Liftover version: [e.g., 1.0.0 or commit hash]
+        - Container engine: [e.g., Docker 20.10.0, Singularity 3.8.0]
+        - Execution environment: [e.g., local, HPC cluster, cloud]
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: input_data
+    attributes:
+      label: Input Data Information
+      description: Information about the data being processed (no sensitive information)
+      placeholder: |
+        - VCF file size: [e.g., 100MB, 2GB]
+        - Number of samples: [e.g., 1000]
+        - Number of variants: [e.g., 500000]
+        - Source genome build: [e.g., hg19/GRCh37]
+        - Target genome build: [e.g., hg38/GRCh38]
+        - Chromosome naming: [e.g., chr1 or 1]
+        - VCF compressed: [yes/no]
+        - VCF indexed: [yes/no]
+    validations:
+      required: false
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command Used
+      description: The exact command or configuration you used
+      placeholder: |
+        nextflow run AfriGen-D/vcf-liftover \
+          --input input.vcf.gz \
+          --target_fasta GRCh38.fa \
+          --outdir results \
+          -profile singularity
+      render: bash
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs
+      description: Copy and paste relevant error messages or log output
+      placeholder: Paste error logs here...
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context about the problem
+      placeholder: Add any other relevant information...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confidentiality
+    attributes:
+      label: Data Privacy
+      options:
+        - label: I confirm that no sensitive or private data is included in this report
+          required: true
+        - label: I understand that this issue will be publicly visible
+          required: true

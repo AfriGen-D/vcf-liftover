@@ -1,0 +1,4 @@
+sample_id,vcf_path
+sample1,test_data/hg19/vcf/sample1.vcf.gz
+sample2,test_data/hg19/vcf/sample2.vcf.gz
+sample3,test_data/hg19/vcf/sample3.vcf.gz

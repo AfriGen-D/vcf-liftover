@@ -1,0 +1,228 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.2.0)'
+        required: true
+        type: string
+
+jobs:
+  validate-tag:
+    name: Validate Release Tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: get-version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "Expected format: X.Y.Z (e.g., 1.2.0)"
+            exit 1
+          fi
+          echo "✅ Version format valid: $VERSION"
+
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    needs: validate-tag
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v1
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run pipeline tests
+        run: |
+          nextflow run ${GITHUB_WORKSPACE}/main.nf \
+            -profile test,docker \
+            --outdir release_test_results \
+            -resume
+
+      - name: Validate test outputs
+        run: |
+          test -d release_test_results/final || exit 1
+          test -d release_test_results/reports || exit 1
+          test -f release_test_results/reports/liftover_statistics.txt || exit 1
+          echo "✅ All tests passed!"
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate-tag, build-and-test]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "First release - generating changelog from all commits"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            echo "Generating changelog from $PREV_TAG to HEAD"
+            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          # Save changelog to file
+          echo "$CHANGELOG" > changelog.txt
+
+          # Create multiline output
+          {
+            echo 'changelog<<EOF'
+            cat changelog.txt
+            echo EOF
+          } >> $GITHUB_OUTPUT
+
+      - name: Create release notes
+        id: release-notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          cat > release_notes.md << 'RELEASE_NOTES'
+          ## vcf-liftover v${{ steps.version.outputs.version }}
+
+          ### What's Changed
+
+          ${{ steps.changelog.outputs.changelog }}
+
+          ### Installation
+
+          ```bash
+          # Clone the repository
+          git clone --branch v${{ steps.version.outputs.version }} https://github.com/AfriGen-D/vcf-liftover.git
+          cd vcf-liftover
+
+          # Run with test data
+          nextflow run main.nf -profile test,docker
+          ```
+
+          ### Requirements
+
+          - Nextflow ≥ 23.04.0
+          - Singularity or Docker
+          - Target reference genome (e.g., GRCh38)
+
+          ### Documentation
+
+          📖 **Complete documentation**: https://afrigen-d.github.io/vcf-liftover
+
+          ### Support
+
+          - 🐛 **Issues**: https://github.com/AfriGen-D/vcf-liftover/issues
+          - ✉️ **Contact**: mamana.mbiyavanga@uct.ac.za
+
+          ---
+
+          **Full Changelog**: https://github.com/AfriGen-D/vcf-liftover/compare/${{ github.event.before }}...v${{ steps.version.outputs.version }}
+          RELEASE_NOTES
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release v${{ steps.version.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Notify Release
+    runs-on: ubuntu-latest
+    needs: create-release
+    if: success()
+
+    steps:
+      - name: Release notification
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+          echo "🎉 Successfully released version v$VERSION"
+          echo "Release page: https://github.com/${{ github.repository }}/releases/tag/v$VERSION"
+
+  update-documentation:
+    name: Update Documentation Version
+    runs-on: ubuntu-latest
+    needs: create-release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update version in documentation
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+
+          # Update package.json if it exists
+          if [ -f "docs/package.json" ]; then
+            sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" docs/package.json
+            echo "✅ Updated docs/package.json version"
+          fi
+
+          # Update README.md badges if needed
+          if [ -f "README.md" ]; then
+            # Add version badge if not present
+            if ! grep -q "release-v" README.md; then
+              echo "Adding version badge to README.md"
+            fi
+          fi
+
+      - name: Commit version updates
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          if git diff --quiet; then
+            echo "No changes to commit"
+          else
+            git add -A
+            git commit -m "docs: Update version to ${{ needs.validate-tag.outputs.version }} [skip ci]"
+            git push
+          fi

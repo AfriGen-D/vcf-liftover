@@ -1,0 +1,41 @@
+# Nextflow
+work/
+.nextflow*
+results/
+test_results/
+benchmark_results/
+
+# Documentation build artifacts
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+docs/node_modules/
+
+# Test data generation
+test_data_generation/
+
+# Development documentation (local only)
+dev_docs/
+
+# Test data - ignore generated index files but keep test data
+test_data/*.vcf.gz.tbi
+test_data/*.fa.fai
+test_data/temp_*
+test_data/testdata/*.tbi
+
+# IDE and AI Assistant
+.vscode/
+.idea/
+.cursor/
+CLAUDE.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+.claude

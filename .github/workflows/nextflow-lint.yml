@@ -1,0 +1,185 @@
+name: Nextflow Linting
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - '**.nf'
+      - '**.config'
+      - '.github/workflows/nextflow-lint.yml'
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - '**.nf'
+      - '**.config'
+
+jobs:
+  nextflow-lint:
+    name: Nextflow Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v1
+        with:
+          version: 'latest-everything'
+
+      - name: Validate main workflow
+        run: |
+          echo "Validating main.nf..."
+          nextflow run main.nf --help
+          echo "✅ Main workflow validated!"
+
+      - name: Check Nextflow config
+        run: |
+          echo "Validating nextflow.config..."
+          nextflow config main.nf
+          echo "✅ Config validated!"
+
+      - name: Validate all profiles
+        run: |
+          echo "Validating test,docker profile..."
+          nextflow config main.nf -profile test,docker > /dev/null
+
+          echo "Validating test profile..."
+          nextflow config main.nf -profile test > /dev/null
+
+          echo "✅ All profiles validated!"
+
+      - name: Check for DSL2 syntax
+        run: |
+          echo "Checking for DSL2 syntax in workflow files..."
+          grep -r "nextflow.enable.dsl = 2" . || echo "⚠️  DSL2 not explicitly enabled"
+          echo "✅ DSL2 syntax check complete!"
+
+      - name: Validate module syntax
+        run: |
+          echo "Validating module files..."
+          for module in modules/*.nf; do
+            echo "Checking $module..."
+            nextflow run "$module" --help 2>&1 || echo "⚠️  $module may need review"
+          done
+          echo "✅ Module validation complete!"
+
+      - name: Check workflow syntax
+        run: |
+          echo "Validating workflow files..."
+          for workflow in workflows/*.nf; do
+            echo "Checking $workflow..."
+            grep -q "workflow" "$workflow" || echo "⚠️  $workflow may not contain workflow definition"
+          done
+          echo "✅ Workflow syntax check complete!"
+
+  config-lint:
+    name: Configuration Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v1
+
+      - name: Validate config files
+        run: |
+          echo "Checking configuration files..."
+
+          # Check base config
+          nextflow config -show-profiles main.nf | grep -q "test" || echo "⚠️  test profile not found"
+
+          # Check for required parameters
+          nextflow config main.nf | grep -q "params.outdir" || echo "⚠️  outdir parameter not defined"
+
+          echo "✅ Configuration validation complete!"
+
+      - name: Check container definitions
+        run: |
+          echo "Checking container definitions..."
+
+          # Check singularity config
+          if [ -f "conf/singularity.config" ]; then
+            grep -q "container" conf/singularity.config || echo "⚠️  No container definitions in singularity.config"
+          fi
+
+          # Check docker config if exists
+          if [ -f "conf/docker.config" ]; then
+            grep -q "container" conf/docker.config || echo "⚠️  No container definitions in docker.config"
+          fi
+
+          echo "✅ Container check complete!"
+
+  dependencies:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Check for required files
+        run: |
+          echo "Checking required files..."
+
+          test -f main.nf || (echo "❌ main.nf not found" && exit 1)
+          test -f nextflow.config || (echo "❌ nextflow.config not found" && exit 1)
+          test -d modules || (echo "❌ modules/ directory not found" && exit 1)
+          test -d workflows || (echo "❌ workflows/ directory not found" && exit 1)
+          test -d bin || (echo "❌ bin/ directory not found" && exit 1)
+
+          echo "✅ All required files present!"
+
+      - name: Check chain files
+        run: |
+          echo "Checking for chain files..."
+
+          test -d chains || echo "⚠️  chains/ directory not found"
+
+          if [ -d chains ]; then
+            ls chains/*.gz > /dev/null 2>&1 || echo "⚠️  No .gz chain files found"
+          fi
+
+          echo "✅ Chain files check complete!"
+
+  documentation-sync:
+    name: Documentation Sync Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Check README completeness
+        run: |
+          echo "Checking README.md..."
+
+          test -f README.md || (echo "❌ README.md not found" && exit 1)
+
+          # Check for important sections
+          grep -q "Quick Start" README.md || echo "⚠️  Quick Start section missing"
+          grep -q "Documentation" README.md || echo "⚠️  Documentation section missing"
+          grep -q "Requirements" README.md || echo "⚠️  Requirements section missing"
+
+          echo "✅ README check complete!"
+
+      - name: Validate test data
+        run: |
+          echo "Checking test data..."
+
+          if [ -d "test_data" ]; then
+            test -f test_data/samples.csv || echo "⚠️  samples.csv not found"
+
+            # Check if test VCF files exist
+            ls test_data/*.vcf.gz > /dev/null 2>&1 || echo "⚠️  No test VCF files found"
+          else
+            echo "⚠️  test_data/ directory not found"
+          fi
+
+          echo "✅ Test data check complete!"

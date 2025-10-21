@@ -1,0 +1,105 @@
+/**
+ * Custom styles for AfriGen-D VitePress documentation
+ */
+
+/* CSS Custom Properties */
+:root {
+  --vp-nav-logo-height: 100%;
+  
+  /* AfriGen-D brand colors */
+  --vp-c-brand: #2E7D32;
+  --vp-c-brand-light: #4CAF50;
+  --vp-c-brand-lighter: #66BB6A;
+  --vp-c-brand-dark: #1B5E20;
+  --vp-c-brand-darker: #2E7D32;
+  
+  --vp-c-accent: #FFA000;
+  --vp-c-accent-light: #FFB300;
+  --vp-c-accent-dark: #FF8F00;
+}
+
+.VPNavBarTitle .logo {
+  height: var(--vp-nav-logo-height);
+  width: auto !important;
+  margin-right: 12px;
+  object-fit: contain;
+}
+
+/* Mobile logo sizing */
+@media (max-width: 768px) {
+  .VPNavBarTitle .logo {
+    height: 24px !important;
+  }
+}
+
+/* Dark mode logo adjustments */
+.dark .VPNavBarTitle .logo {
+  filter: brightness(1.1);
+}
+
+/* Hero section logo on homepage */
+.VPHero .image-src {
+  max-height: 200px !important;
+  width: auto !important;
+}
+
+/* Sidebar brand logo */
+.VPSidebar .logo {
+  height: 32px !important;
+  width: auto !important;
+  margin: 0 auto;
+}
+
+
+/* Button styling with AfriGen-D colors */
+.VPButton.brand {
+  background-color: var(--vp-c-brand);
+  border-color: var(--vp-c-brand);
+}
+
+.VPButton.brand:hover {
+  background-color: var(--vp-c-brand-light);
+  border-color: var(--vp-c-brand-light);
+}
+
+/* Link colors */
+.VPContent a {
+  color: var(--vp-c-brand);
+}
+
+.VPContent a:hover {
+  color: var(--vp-c-brand-light);
+}
+
+/* Feature cards with AfriGen-D accent */
+.VPFeature {
+  border-top: 2px solid var(--vp-c-accent);
+}
+
+/* Code block styling */
+.vp-code-dark {
+  background-color: #1a1a1a;
+}
+
+.vp-code-light {
+  background-color: #f6f8fa;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--vp-c-bg-soft);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--vp-c-brand);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vp-c-brand-dark);
+}
