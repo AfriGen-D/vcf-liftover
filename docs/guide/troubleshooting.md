@@ -83,6 +83,7 @@ rm -rf work/
 **Symptom**: 0% success rate
 
 **Solution**:
+
 ```bash
 # Check chromosome naming
 zcat input.vcf.gz | grep -v "^#" | head -1
@@ -98,6 +99,7 @@ head reference.fa.fai
 **Symptom**: Cannot download Singularity image
 
 **Solution**:
+
 ```bash
 # Manually pull image
 singularity pull docker://afrigend/crossmap:latest
@@ -111,6 +113,7 @@ export NXF_SINGULARITY_CACHEDIR=/path/to/cache
 **Symptom**: Cannot connect to Docker daemon
 
 **Solution**:
+
 ```bash
 # Add user to docker group
 sudo usermod -aG docker $USER
@@ -118,6 +121,41 @@ sudo usermod -aG docker $USER
 # Or use Singularity instead
 nextflow run main.nf -profile singularity
 ```
+
+### Singularity Module Not Available in Container
+
+**Symptom**: `env: 'singularity': No such file or directory` even when Singularity module is loaded
+
+**Root Cause**: Environment modules (loaded with `module load singularity`) are not inherited by Nextflow's container execution environment.
+
+**Solutions**:
+
+1. **System-wide Singularity installation** (Recommended for production):
+   ```bash
+   # Singularity must be in system PATH, not loaded via modules
+   which singularity  # Should show /usr/bin/singularity or similar
+   ```
+
+2. **Use Docker instead** (Alternative):
+   ```bash
+   nextflow run main.nf -profile test,docker
+   ```
+
+3. **Use Conda profile** (If available):
+   ```bash
+   nextflow run main.nf -profile test,conda
+   ```
+
+4. **Set Singularity path explicitly** in `nextflow.config`:
+   ```groovy
+   singularity {
+     enabled = true
+     cacheDir = "$HOME/.singularity"
+     runOptions = "--bind /path/to/data"
+     // Add explicit path if needed
+     // singularity.command = '/full/path/to/singularity'
+   }
+   ```
 
 ## Resume Issues
 

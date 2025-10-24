@@ -23,13 +23,27 @@ The pipeline is built using [Nextflow](https://www.nextflow.io), a workflow tool
 
 VCF Liftover performs the following steps:
 
-1. **Input Validation** - Verify VCF files are properly formatted and indexed
-2. **Chromosome Validation** - Check chromosome naming compatibility with target genome
-3. **Coordinate Liftover** - Convert genomic coordinates using CrossMap
-4. **Automatic Chromosome Renaming** - Smart detection and correction of chromosome naming differences
-5. **VCF Sorting & Compression** - Sort and compress output VCF files
-6. **Quality Control** - Generate statistics and validation reports
-7. **Results Aggregation** - Combine outputs and generate comprehensive HTML reports
+1. **Enhanced Input Validation** - Comprehensive checks: file integrity, gzip compression, VCF format, data presence
+2. **Genome Build Detection** - Automatic detection of VCF and reference genome builds
+3. **Build Compatibility Check** - Prevents incorrect results from genome build mismatches ⚠️
+4. **Chromosome Validation** - Check chromosome naming compatibility with target genome
+5. **Coordinate Liftover** - Convert genomic coordinates using CrossMap
+6. **Automatic Chromosome Renaming** - Smart detection and correction of chromosome naming differences
+7. **VCF Sorting & Compression** - Sort and compress output VCF files
+8. **Quality Control** - Generate statistics and validation reports
+9. **Results Aggregation** - Combine outputs and generate comprehensive HTML reports
+
+### ✨ New: Enhanced Validation Features
+
+The pipeline now includes **robust validation** with clear, user-friendly error messages:
+
+- **Visual Error Formatting** - Beautiful ASCII boxes make errors impossible to miss
+- **Build Mismatch Prevention** - Automatically detects incompatible genome builds
+- **Gzip Integrity Checking** - Prevents crashes from corrupted files
+- **File Size Validation** - Detects empty or truncated files early
+- **Graceful Failure Handling** - Failed samples skipped, valid samples continue processing
+
+See [VALIDATION_ENHANCEMENTS_SUMMARY.md](VALIDATION_ENHANCEMENTS_SUMMARY.md) for details.
 
 ## Quick Start
 

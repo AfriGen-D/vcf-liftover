@@ -15,6 +15,7 @@ The sample sheet must be a CSV file with the following columns:
 | `fastq_2` | path | Path to R2 FASTQ file (PE only) | * |
 
 **Example:**
+
 ```csv
 sample,fastq_1,fastq_2
 sample1,/path/to/sample1_R1.fastq.gz,/path/to/sample1_R2.fastq.gz

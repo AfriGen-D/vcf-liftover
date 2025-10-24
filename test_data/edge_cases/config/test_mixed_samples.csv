@@ -1,0 +1,4 @@
+sample_id,vcf_path
+valid1,/users/mamana/vcf-liftover/test_data/edge_cases/vcf/valid_hg19.vcf.gz
+empty1,/users/mamana/vcf-liftover/test_data/edge_cases/vcf/empty.vcf.gz
+hg38_bad,/users/mamana/vcf-liftover/test_data/edge_cases/vcf/hg38_mismatch.vcf.gz

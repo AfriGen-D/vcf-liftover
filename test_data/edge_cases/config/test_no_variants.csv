@@ -1,0 +1,2 @@
+sample_id,vcf_path
+no_variants,/users/mamana/vcf-liftover/test_data/edge_cases/vcf/header_only.vcf.gz

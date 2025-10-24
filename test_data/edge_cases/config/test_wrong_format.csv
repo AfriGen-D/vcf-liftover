@@ -1,0 +1,2 @@
+sample_id,vcf_path
+not_vcf,/users/mamana/vcf-liftover/test_data/edge_cases/vcf/not_vcf_format.vcf.gz

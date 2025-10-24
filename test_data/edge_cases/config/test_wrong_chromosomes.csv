@@ -1,0 +1,2 @@
+sample_id,vcf_path
+wrong_chr,/users/mamana/vcf-liftover/test_data/edge_cases/vcf/wrong_chromosomes.vcf.gz

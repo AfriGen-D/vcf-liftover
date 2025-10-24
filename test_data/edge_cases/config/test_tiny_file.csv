@@ -1,0 +1,2 @@
+sample_id,vcf_path
+tiny_truncated,/users/mamana/vcf-liftover/test_data/edge_cases/vcf/tiny_truncated.vcf.gz

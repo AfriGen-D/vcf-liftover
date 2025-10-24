@@ -6,6 +6,8 @@ Checks if chromosomes in VCF files exist in the target reference genome.
 Detects common issues like:
 - Wrong reference genome (e.g., using chr22 when data has chr4/8/9)
 - Chromosome naming mismatches (e.g., "4" vs "chr4")
+
+Enhanced with visual error formatting and detailed suggestions.
 """
 
 import csv
@@ -13,6 +15,18 @@ import sys
 import gzip
 import argparse
 from pathlib import Path
+
+# Import error formatting
+try:
+    from format_error_message import format_critical_error, format_info, format_warning
+except ImportError:
+    # Fallback
+    def format_critical_error(title, msgs, suggestions=None):
+        return f"ERROR: {title}\n" + "\n".join(msgs if isinstance(msgs, list) else [msgs])
+    def format_info(title, msgs):
+        return f"INFO: {title}\n" + "\n".join(msgs if isinstance(msgs, list) else [msgs])
+    def format_warning(title, msgs, ctx=None):
+        return f"WARNING: {title}\n" + "\n".join(msgs if isinstance(msgs, list) else [msgs])
 
 
 def get_vcf_chromosomes(vcf_path):
@@ -95,10 +109,17 @@ def check_chromosome_compatibility(vcf_chromosomes, ref_chromosomes, sample_id, 
     # Only fail if chromosomes are completely missing from the reference.
     if naming_mismatch and not completely_missing:
         # This is just a naming convention difference - CrossMap will handle it
-        print(f"\nℹ INFO: Naming convention difference detected for sample: {sample_id}")
-        print(f"  VCF chromosomes: {sorted(missing)}")
-        print(f"  Reference has equivalent chromosomes with different naming")
-        print(f"  → CrossMap will handle chromosome name mapping via the chain file")
+        info_msg = format_info(
+            title="Chromosome Naming Difference Detected",
+            message_lines=[
+                f"Sample: {sample_id}",
+                f"VCF uses: {', '.join(sorted(missing)[:5])}{'...' if len(missing) > 5 else ''}",
+                f"Reference uses different naming convention",
+                "",
+                "✓ This is OK! CrossMap will handle chromosome name mapping via the chain file."
+            ]
+        )
+        print(info_msg)
         return True, None  # Not an error!
 
     if not completely_missing:
@@ -106,36 +127,47 @@ def check_chromosome_compatibility(vcf_chromosomes, ref_chromosomes, sample_id, 
         return True, None
 
     # Build error message for completely missing chromosomes
-    errors = []
-    errors.append(f"\nERROR: Chromosome mismatch detected for sample: {sample_id}")
-    errors.append(f"VCF file: {vcf_path}")
-    errors.append(f"\nVCF chromosomes: {sorted(vcf_chromosomes)}")
-    errors.append(f"Reference chromosomes: {sorted(ref_chromosomes)}")
+    error_msg = format_critical_error(
+        title="Chromosome Mismatch - Wrong Reference Genome",
+        message_lines=[
+            f"Sample: {sample_id}",
+            f"VCF file: {vcf_path}",
+            "",
+            f"VCF chromosomes: {', '.join(sorted(vcf_chromosomes))}",
+            f"Reference chromosomes: {', '.join(sorted(ref_chromosomes))}",
+            "",
+            "✓ Matching chromosomes: " + (', '.join(sorted(matching)) if matching else "NONE"),
+            "❌ Missing from reference: " + ', '.join(sorted(completely_missing)),
+            "",
+            "Your VCF contains chromosomes that are NOT in the target reference genome.",
+            "This means you are using the WRONG reference genome!"
+        ],
+        suggestions=[
+            f"Your data has chromosomes: {', '.join(sorted(completely_missing)[:5])}",
+            f"But the reference only has: {', '.join(sorted(ref_normalized)[:10])}",
+            "Provide a reference genome that contains ALL chromosomes in your VCF",
+            "Check if you're mixing chromosome subsets (e.g., chr22 ref with whole-genome VCF)"
+        ]
+    )
 
-    if matching:
-        errors.append(f"\n✓ Matching chromosomes: {sorted(matching)}")
-
-    # Only report completely missing chromosomes as errors
-    errors.append(f"\n✗ These chromosomes are completely missing from the reference:")
-    errors.append(f"  {sorted(completely_missing)}")
-    errors.append(f"\nSuggestion:")
-    errors.append(f"  • You are using the WRONG reference genome!")
-    errors.append(f"  • Your data has chromosomes: {sorted(completely_missing)}")
-    errors.append(f"  • But the reference only has: {sorted(ref_normalized)}")
-    errors.append(f"  • Please provide a reference genome that contains all chromosomes in your data")
-
-    return False, '\n'.join(errors)
+    return False, error_msg
 
 
 def validate_all_samples(input_csv, target_fasta):
     """Validate chromosome compatibility for all samples"""
 
-    print(f"Validating chromosome compatibility...")
-    print(f"Target reference: {target_fasta}")
+    print(format_info(
+        title="Chromosome Validation Starting",
+        message_lines=[
+            f"Target reference: {target_fasta}",
+            "Checking if VCF chromosomes exist in reference genome..."
+        ]
+    ))
 
     # Get reference chromosomes
     ref_chromosomes = get_reference_chromosomes(target_fasta)
-    print(f"Reference contains {len(ref_chromosomes)} chromosome(s): {sorted(ref_chromosomes)}")
+    print(f"\nReference contains {len(ref_chromosomes)} chromosome(s):")
+    print(f"  {', '.join(sorted(ref_chromosomes)[:15])}{'...' if len(ref_chromosomes) > 15 else ''}")
 
     # Read samples
     with open(input_csv, 'r') as f:
@@ -148,11 +180,12 @@ def validate_all_samples(input_csv, target_fasta):
         sample_id = sample['sample_id']
         vcf_path = sample['vcf_path']
 
-        print(f"\nChecking sample: {sample_id}")
+        print(f"\n{'─' * 76}")
+        print(f"Checking sample: {sample_id}")
 
         # Get VCF chromosomes
         vcf_chromosomes = get_vcf_chromosomes(vcf_path)
-        print(f"  VCF chromosomes: {sorted(vcf_chromosomes)}")
+        print(f"  VCF chromosomes: {', '.join(sorted(vcf_chromosomes))}")
 
         # Check compatibility
         is_valid, error_msg = check_chromosome_compatibility(
@@ -160,15 +193,36 @@ def validate_all_samples(input_csv, target_fasta):
         )
 
         if not is_valid:
-            print(error_msg)
+            print(error_msg, file=sys.stderr)
             all_valid = False
         else:
             print(f"  ✓ All chromosomes are compatible")
 
+    print(f"\n{'═' * 76}")
+
     if not all_valid:
+        print(format_critical_error(
+            title="Chromosome Validation Failed",
+            message_lines=[
+                "One or more samples have chromosomes missing from the target reference",
+                "Cannot proceed with liftover"
+            ],
+            suggestions=[
+                "Check error messages above for specific missing chromosomes",
+                "Ensure you're using the correct target reference genome",
+                "Verify reference contains all chromosomes in your VCF files"
+            ]
+        ), file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n✓ All samples passed chromosome validation!")
+    print(format_info(
+        title="Chromosome Validation Complete",
+        message_lines=[
+            f"✓ All {len(samples)} samples passed validation",
+            "All VCF chromosomes are present in the target reference",
+            "Ready to proceed with liftover"
+        ]
+    ))
 
 
 def main():
