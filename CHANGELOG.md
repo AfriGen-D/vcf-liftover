@@ -7,19 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- AfriGen-D branding and logo to README
-- Comprehensive support links (helpdesk, discussions, website)
-- CHANGELOG.md for version tracking
-- CITATIONS.md for tool references
-- CODE_OF_CONDUCT.md for community guidelines
-- GitHub issue templates for bug reports and feature requests
-- Issue template configuration with helpdesk links
+## [1.1.0] - 2025-10-24
+
+### Added - Validation Enhancements
+- **Visual Error Formatting**: ASCII box formatting for all validation messages (impossible to miss)
+- **Genome Build Detection**: Automatic detection of hg19, hg38, mm9, mm10 from VCF headers
+- **Build Compatibility Checking**: Critical feature preventing incorrect liftover from wrong genome builds
+- **Gzip Integrity Testing**: Detects corrupted compressed files before processing
+- **File Size Validation**: Detects empty and truncated files early
+- **Enhanced Format Validation**: Detailed VCF format checking with specific error messages
+- **Data Presence Checking**: Detects VCFs with headers but no variant records
+- **Graceful Failure Handling**: Failed samples skipped, valid samples continue processing
+
+### Added - New Validation Scripts
+- `bin/format_error_message.py`: Centralized error formatting utility (275 lines)
+- `bin/detect_genome_build.py`: Automatic genome build detection (425 lines)
+- `bin/check_build_compatibility.py`: Build mismatch prevention (320 lines)
+- `modules/check_build_mismatch.nf`: Workflow integration for build checking
+
+### Added - Edge Case Test Infrastructure
+- Created 9 edge case VCF files testing all validation features
+- Added 10 test configuration CSV files for systematic testing
+- Comprehensive test script with 13 total tests (4 functional + 9 validation)
+- Complete documentation: README, TESTING_GUIDE, TEST_STATUS in test_data/edge_cases/
+
+### Enhanced
+- `bin/check_input.py`: Added 5 new validation checks (+300 lines)
+- `bin/validate_chromosomes.py`: Visual error formatting (+50 lines)
+- `workflows/liftover.nf`: Integrated Step 0 build compatibility check (+75 lines)
+- `nextflow.config`: Added build compatibility parameter and Singularity path configuration
+- `conf/singularity.config`: Streamlined to use only mamana namespace containers
 
 ### Changed
-- Updated README with AfriGen-D template structure
-- Enhanced documentation links and support resources
-- Improved pipeline summary and introduction sections
+- Workflow now performs build compatibility check before liftover (optional, enabled by default)
+- Sample-level validation status files enable filtering of failed samples
+- Increased Singularity pull timeout from 20 to 60 minutes
+
+### Documentation
+- Updated README.md highlighting new validation features
+- Enhanced docs/guide/troubleshooting.md with container configuration solutions
+- Added dev_docs/VALIDATION_IMPLEMENTATION_REPORT.md (comprehensive technical report)
+- Added dev_docs/validation_enhancements.md (implementation details)
+- Updated docs/guide/input-files.md with validation information
+
+### Fixed
+- Visual error messages now consistently formatted across all validation scripts
+- Chromosome validation distinguishes naming differences (OK) from missing chromosomes (ERROR)
 
 ## [1.0.0] - 2025-01-XX
 
