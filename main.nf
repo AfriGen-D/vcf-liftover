@@ -348,6 +348,79 @@ workflow.onComplete {
     }
 }
 
+import groovy.json.JsonOutput
+
+// Emit a structured error descriptor under `${params.logs}/fedimpute_error.json`
+// (see docs/PIPELINE_ERROR_SCHEMA.md in the fedimpute repo). The FedImpute
+// backend reads this file via the WES outputs endpoint and renders a typed
+// error UI with a remediation button; if the file is absent the backend
+// falls back to parsing stdout.
+def emitStructuredError(Map err) {
+    try {
+        // Prefer params.logs (checkref-style), then params.outdir/logs, then launchDir/logs
+        def logsPath
+        if (params.containsKey('logs') && params.logs) {
+            logsPath = "${params.logs}"
+        } else if (params.containsKey('outdir') && params.outdir) {
+            logsPath = "${params.outdir}/logs"
+        } else {
+            logsPath = "${workflow.launchDir}/logs"
+        }
+        def logsDir = file(logsPath)
+        logsDir.mkdirs()
+        def payload = [version: "1"] + err
+        file("${logsPath}/fedimpute_error.json").text =
+            JsonOutput.prettyPrint(JsonOutput.toJson(payload))
+    } catch (Exception e) {
+        log.warn "Failed to write fedimpute_error.json: ${e.message}"
+    }
+}
+
 workflow.onError {
     log.error "Pipeline failed with error: ${workflow.errorMessage}"
+
+    // Best-effort classification of the failure so the FedImpute UI can
+    // surface a meaningful code + remediation instead of a bare
+    // "EXECUTOR_ERROR". We look at the workflow error message text and,
+    // where the pattern is unambiguous, assign a specific code.
+    def msg = (workflow.errorMessage ?: '').toString()
+    def code = 'PIPELINE_FAILED'
+    def severity = 'pipeline_error'
+    def remediation = null
+    def summary = "vcf-liftover pipeline failed"
+
+    if (msg =~ /(?i)GENERATE_CHR_MAPPING.*exit status \(1\)/ ||
+        msg =~ /(?i)Could not extract chromosomes/) {
+        code = 'CHR_EXTRACTION_FAILED'
+        severity = 'user_error'
+        summary = "Could not extract chromosomes from the input VCF. The file may be truncated, missing an index, or in an unsupported format."
+        remediation = [
+            kind: 'retry',
+            hint: 'Verify the VCF opens with `bcftools view` locally, and that it has a .tbi or .csi index if gzipped. Then re-upload.',
+        ]
+    } else if (msg =~ /(?i)LIFTOVER.*exit status \(1\)/) {
+        code = 'LIFTOVER_FAILED'
+        severity = 'user_error'
+        summary = "Liftover process failed. This usually means the source build does not match the chain file."
+        remediation = [
+            kind: 'select_panel',
+            hint: 'Check that the source and target builds correspond to the selected chain file (e.g. hg19 -> hg38 needs hg19ToHg38.over.chain).',
+        ]
+    } else if (msg =~ /(?i)chain.*not found|target_fasta.*not found/) {
+        code = 'MISSING_REFERENCE_FILE'
+        severity = 'pipeline_error'
+        summary = "A required reference file (chain or target FASTA) is missing from the workflow configuration."
+        remediation = [
+            kind: 'contact_support',
+            hint: 'This is a service-side configuration issue; the operator needs to fix the workflow configuration.',
+        ]
+    }
+
+    emitStructuredError([
+        code: code,
+        severity: severity,
+        summary: summary,
+        detail: msg.take(2000),
+        remediation: remediation,
+    ])
 }
