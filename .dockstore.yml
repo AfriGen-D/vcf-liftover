@@ -1,0 +1,12 @@
+version: 1.2
+workflows:
+  - subclass: nfl
+    primaryDescriptorPath: /main.nf
+    readMePath: /README.md
+    name: vcf-liftover
+    publish: true
+    topic: Convert VCF coordinates between human genome builds (GRCh37/b37 <-> GRCh38/b38) with per-chromosome extraction, liftover via GATK, and validation. Emits structured errors on failure.
+    latestTagAsDefault: true
+    authors:
+      - name: AfriGen-D
+        email: support@bioinformaticsinstitute.africa
