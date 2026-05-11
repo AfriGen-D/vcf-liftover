@@ -14,7 +14,7 @@ process RENAME_CHROMOSOMES {
     tuple val(sample_id), path(vcf), path(chr_mapping)
 
     output:
-    tuple val(sample_id), path("${sample_id}.renamed.bcf"), emit: vcf
+    tuple val(sample_id), path("${sample_id}.renamed.vcf.gz"), emit: vcf
 
     script:
     """
@@ -40,7 +40,7 @@ process RENAME_CHROMOSOMES {
         echo "Copying VCF without modifications..."
 
         # Just convert to BCF without renaming
-        bcftools view ${vcf} -Ob -o ${sample_id}.renamed.bcf
+        cp ${vcf} ${sample_id}.renamed.vcf.gz
 
         if [ \$? -ne 0 ]; then
             echo "ERROR: Failed to convert VCF to BCF for sample ${sample_id}" >&2
@@ -62,7 +62,7 @@ process RENAME_CHROMOSOMES {
             --rename-chrs ${chr_mapping} \\
             ${vcf} \\
             -Ob \\
-            -o ${sample_id}.renamed.bcf
+            -o ${sample_id}.renamed.vcf.gz
 
         if [ \$? -ne 0 ]; then
             echo "ERROR: Failed to rename chromosomes for sample ${sample_id}" >&2
@@ -71,20 +71,20 @@ process RENAME_CHROMOSOMES {
     fi
 
     # Verify output file was created
-    if [ ! -f "${sample_id}.renamed.bcf" ]; then
+    if [ ! -f "${sample_id}.renamed.vcf.gz" ]; then
         echo "ERROR: Renamed BCF file not created for sample ${sample_id}" >&2
         exit 1
     fi
 
     echo "Chromosome renaming completed successfully for sample: ${sample_id}"
-    echo "Output BCF: ${sample_id}.renamed.bcf"
+    echo "Output BCF: ${sample_id}.renamed.vcf.gz"
 
     # Show chromosome names before and after
     if command -v bcftools &> /dev/null; then
         echo "Chromosomes in output file:"
-        bcftools view -h ${sample_id}.renamed.bcf | grep "^##contig" | head -10
+        bcftools view -h ${sample_id}.renamed.vcf.gz | grep "^##contig" | head -10
 
-        variant_count=\$(bcftools view -H ${sample_id}.renamed.bcf | wc -l)
+        variant_count=\$(bcftools view -H ${sample_id}.renamed.vcf.gz | wc -l)
         echo "Variants after renaming: \$variant_count"
     fi
     """

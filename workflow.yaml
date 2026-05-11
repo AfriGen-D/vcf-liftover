@@ -1,0 +1,103 @@
+id: vcf-liftover
+name: VCF Liftover
+description: >
+  Nextflow pipeline for converting genomic coordinates between genome builds
+  (e.g., GRCh37/hg19 to GRCh38/hg38) with comprehensive validation and QC reporting.
+version: 2.0.0
+website: https://github.com/AfriGen-D/vcf-liftover
+category: Application
+submitButton: Start Liftover
+
+workflow:
+  steps:
+    - name: VCF Liftover
+      type: nextflow
+      script: main.nf
+
+  # Pipeline stages shown in the job progress timeline
+  stages:
+    - id: input_handler
+      label: Input Processing
+      processes: [INPUT_HANDLER]
+      expected_tasks: 1
+    - id: input_check
+      label: Input Validation
+      processes: [INPUT_CHECK]
+      expected_tasks: 1
+    - id: build_check
+      label: Build Check
+      processes: [CHECK_BUILD_MISMATCH, VALIDATE_CHROMOSOMES]
+      expected_tasks: 1
+    - id: liftover
+      label: Liftover
+      processes: [CROSSMAP_VCF, PICARD_LIFTOVER]
+      expected_tasks: 1
+    - id: postprocessing
+      label: Post-processing
+      processes: [SORT_VCF, RENAME_CHROMOSOMES, FIX_CONTIG, GENERATE_CHR_MAPPING, FILTER_REJECTED]
+      expected_tasks: 5
+    - id: indexing
+      label: Indexing & Stats
+      processes: [INDEX_VCF, LIFTOVER_STATS, GENERATE_REPORT]
+      expected_tasks: 3
+
+  inputs:
+    - id: source_build
+      description: Source Genome Build
+      type: list
+      value: hg38
+      values:
+        hg38: hg38/GRCh38/b38
+        hg19: hg19/GRCh37/b37
+
+    - id: target_build
+      description: Target Genome Build
+      type: list
+      value: hg19
+      values:
+        hg19: hg19/GRCh37/b37
+        hg38: hg38/GRCh38/b38
+
+    - id: chain_file
+      description: Liftover Chain File
+      type: list
+      value: /mnt/impute-storage/apps/references/chain_files/hg38ToHg19.over.chain.gz
+      values:
+        /mnt/impute-storage/apps/references/chain_files/hg38ToHg19.over.chain.gz: "hg38 -> hg19"
+        /mnt/impute-storage/apps/references/chain_files/hg19ToHg38.over.chain.gz: "hg19 -> hg38"
+
+    - id: target_fasta
+      description: Target Reference Genome
+      type: list
+      value: /mnt/impute-storage/apps/references/human/GRCh37/hg19.fasta
+      values:
+        /mnt/impute-storage/apps/references/human/GRCh37/hg19.fasta: GRCh37/hg19
+        /mnt/impute-storage/apps/references/human/GRCh38/hg38.fasta: GRCh38/hg38
+
+    - id: validate_output
+      description: Validate Output
+      type: checkbox
+      value: false
+
+    - id: liftover_tool
+      description: Liftover Tool
+      type: list
+      value: picard
+      values:
+        picard: "Picard LiftoverVcf (recommended)"
+        crossmap: "CrossMap (legacy)"
+
+  # Default Nextflow params merged with user selections
+  defaults:
+    chain_file: /mnt/impute-storage/apps/references/chain_files/hg38ToHg19.over.chain.gz
+    source_build: hg38
+    target_build: hg19
+    target_fasta: /mnt/impute-storage/apps/references/human/GRCh37/hg19.fasta
+    validate_output: false
+    liftover_tool: picard
+
+  # Input VCF param name for this pipeline
+  input_param: input
+
+  # Output param name
+  output_param: outdir

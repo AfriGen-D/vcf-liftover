@@ -40,3 +40,8 @@ Thumbs.db
 *.temp
 .claudebin/__pycache__/
 *.backup
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
