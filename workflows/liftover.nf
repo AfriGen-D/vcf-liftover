@@ -15,6 +15,7 @@ include { INPUT_CHECK } from '../modules/input_check'
 include { VALIDATE_CHROMOSOMES } from '../modules/validate_chromosomes'
 include { CHECK_BUILD_MISMATCH } from '../modules/check_build_mismatch'
 include { CROSSMAP_VCF } from '../modules/crossmap'
+include { FIX_MISMATCHED_REF } from '../modules/fix_mismatched_ref'
 include { PREPARE_VCF_FOR_PICARD } from '../modules/prepare_vcf_for_picard'
 include { PICARD_LIFTOVER } from '../modules/picard_liftover'
 include { COUNT_LIFTED_VARIANTS } from '../modules/count_lifted_variants'
@@ -117,6 +118,22 @@ To bypass this check (NOT RECOMMENDED):
     } else {
         log.warn "Build compatibility check DISABLED - proceeding without validation"
         vcf_files_for_liftover = vcf_files
+    }
+
+    // =========================================================================
+    // Optional: pre-flight bcftools +fixref to flip swappable MismatchedRefAllele
+    // before liftover. Off by default — opt in with --fix_mismatched_ref true.
+    // Requires --source_fasta (the SOURCE build's reference).
+    // =========================================================================
+    if (params.fix_mismatched_ref) {
+        if (!params.source_fasta) {
+            log.error "fix_mismatched_ref=true requires --source_fasta <SOURCE build fasta>"
+            System.exit(1)
+        }
+        log.info "Running bcftools +fixref preflight (source=${params.source_fasta})..."
+        source_fasta_ch = file(params.source_fasta)
+        FIX_MISMATCHED_REF(vcf_files_for_liftover, source_fasta_ch)
+        vcf_files_for_liftover = FIX_MISMATCHED_REF.out.vcf
     }
 
     // =========================================================================
