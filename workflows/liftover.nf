@@ -15,7 +15,9 @@ include { INPUT_CHECK } from '../modules/input_check'
 include { VALIDATE_CHROMOSOMES } from '../modules/validate_chromosomes'
 include { CHECK_BUILD_MISMATCH } from '../modules/check_build_mismatch'
 include { CROSSMAP_VCF } from '../modules/crossmap'
+include { PREPARE_VCF_FOR_PICARD } from '../modules/prepare_vcf_for_picard'
 include { PICARD_LIFTOVER } from '../modules/picard_liftover'
+include { COUNT_LIFTED_VARIANTS } from '../modules/count_lifted_variants'
 include { FILTER_REJECTED } from '../modules/filter_rejected'
 include { SORT_VCF } from '../modules/sort_vcf'
 include { GENERATE_CHR_MAPPING } from '../modules/generate_chr_mapping'
@@ -149,12 +151,22 @@ To bypass this check (NOT RECOMMENDED):
         log.info "Step 2: Renaming chromosomes..."
         RENAME_CHROMOSOMES(vcf_with_mapping)
 
-        // Step 3: Run Picard LiftoverVcf
-        log.info "Step 3: Running Picard LiftoverVcf..."
-        picard_input = RENAME_CHROMOSOMES.out.vcf.map { sample_id, vcf ->
+        // Step 3a: Prepare VCF for Picard (BCF→VCF.gz if needed; passthrough otherwise)
+        log.info "Step 3a: Preparing VCF for Picard..."
+        PREPARE_VCF_FOR_PICARD(RENAME_CHROMOSOMES.out.vcf)
+
+        // Step 3b: Run Picard LiftoverVcf
+        log.info "Step 3b: Running Picard LiftoverVcf..."
+        picard_input = PREPARE_VCF_FOR_PICARD.out.vcf.map { sample_id, vcf ->
             [sample_id, vcf, chain_file, target_fasta, target_fasta_fai, target_fasta_dict]
         }
         PICARD_LIFTOVER(picard_input)
+
+        // Step 3c: Count lifted/rejected/swapped variants (bcftools, separate label)
+        counts_input = PICARD_LIFTOVER.out.vcf
+            .join(PICARD_LIFTOVER.out.rejected)
+            .join(PICARD_LIFTOVER.out.log)
+        COUNT_LIFTED_VARIANTS(counts_input)
 
         // Step 4: Analyze rejected variants
         log.info "Step 4: Analyzing rejected variants..."
@@ -168,7 +180,7 @@ To bypass this check (NOT RECOMMENDED):
         log.info "Step 6: Fixing contig headers..."
         FIX_CONTIG_HEADER(SORT_VCF.out.vcf, target_fasta)
 
-        liftover_logs = PICARD_LIFTOVER.out.log
+        liftover_logs = COUNT_LIFTED_VARIANTS.out.log.map { _id, log_file -> log_file }
 
     } else {
         // -----------------------------------------------------------------
@@ -242,7 +254,7 @@ To bypass this check (NOT RECOMMENDED):
         log.info "Generating HTML report..."
         nf_config = file("${projectDir}/nextflow.config")
         GENERATE_REPORT(
-            PICARD_LIFTOVER.out.log.collect(),
+            COUNT_LIFTED_VARIANTS.out.log.map { _id, log_file -> log_file }.collect(),
             FILTER_REJECTED.out.summary.map { _id, txt -> txt }.collect(),
             nf_config
         )
