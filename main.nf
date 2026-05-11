@@ -348,8 +348,6 @@ workflow.onComplete {
     }
 }
 
-import groovy.json.JsonOutput
-
 // Emit a structured error descriptor under `${params.logs}/fedimpute_error.json`
 // (see docs/PIPELINE_ERROR_SCHEMA.md in the fedimpute repo). The FedImpute
 // backend reads this file via the WES outputs endpoint and renders a typed
@@ -370,7 +368,7 @@ def emitStructuredError(Map err) {
         logsDir.mkdirs()
         def payload = [version: "1"] + err
         file("${logsPath}/fedimpute_error.json").text =
-            JsonOutput.prettyPrint(JsonOutput.toJson(payload))
+            groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(payload))
     } catch (Exception e) {
         log.warn "Failed to write fedimpute_error.json: ${e.message}"
     }
