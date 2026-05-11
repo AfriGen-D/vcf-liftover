@@ -25,7 +25,7 @@ process GENERATE_CHR_MAPPING {
 
     # Extract VCF chromosomes using bcftools
     echo "Extracting chromosomes from VCF..."
-    vcf_chroms=\$(bcftools query -f '%CHROM\\n' ${vcf} 2>/dev/null | sort -u)
+    vcf_chroms=\$(bcftools query -f '%CHROM\\n' ${vcf} | sort -u)
 
     if [ -z "\$vcf_chroms" ]; then
         echo "ERROR: Could not extract chromosomes from VCF" >&2

@@ -45,3 +45,5 @@ Thumbs.db
 __pycache__/
 *.pyc
 *.pyo
+# Picard sequence dictionaries are derived from .fa files
+test_data/**/*.dict
