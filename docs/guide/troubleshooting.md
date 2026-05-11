@@ -92,6 +92,27 @@ zcat input.vcf.gz | grep -v "^#" | head -1
 head reference.fa.fai
 ```
 
+### "Could not extract chromosomes from VCF" (k8s profile, pre-`Unreleased`)
+
+**Symptom**: Pipeline dies at `GENERATE_CHR_MAPPING` with
+`ERROR: Could not extract chromosomes from VCF`, even though the input VCF is well-formed.
+
+**Root cause**: Container-config bug fixed in the next release (see [CHANGELOG](../../CHANGELOG.md) → Unreleased → Fixed). `conf/k8s.config` mapped the `vcf_processing` label to a container without `bcftools`, and `2>/dev/null` swallowed the underlying `bcftools: command not found`. The misleading "Could not extract chromosomes" message originates from `modules/generate_chr_mapping.nf` when `bcftools query` returns empty stdout.
+
+**Resolution**: Update to `main` after PR #2 (`fix(k8s): split picard pathway`). If you can't update yet, manually override the container for that label:
+
+```bash
+nextflow run main.nf -profile k8s -process.withLabel:vcf_processing.container='mamana/vcf-processing:latest' ...
+```
+
+### `picard LiftoverVcf` crashes with `UnsatisfiedLinkError` for `libsnappy`
+
+**Symptom**: Pipeline fails inside `PICARD_LIFTOVER` with a Java stack trace involving `org.xerial.snappy.SnappyLoader.loadNativeLibrary` and `htsjdk.samtools.util.SortingCollection.spillToDisk`.
+
+**Root cause**: The picard container lacks `libsnappy`. HTSJDK's `SortingCollection` uses Snappy by default when it spills sorted records to a temp file (which happens once `MAX_RECORDS_IN_RAM` is exceeded — 100k records in our config, hit by any realistic input).
+
+**Resolution**: Fixed by passing `-Dsamjdk.snappy.disable=true` to picard (default `main` since PR #2). HTSJDK falls back to GZIP, which is present.
+
 ## Container Issues
 
 ### Singularity Pull Fails
