@@ -111,7 +111,8 @@ nextflow run main.nf -profile k8s -process.withLabel:vcf_processing.container='m
 
 **Root cause**: The picard container lacks `libsnappy`. HTSJDK's `SortingCollection` uses Snappy by default when it spills sorted records to a temp file (which happens once `MAX_RECORDS_IN_RAM` is exceeded — 100k records in our config, hit by any realistic input).
 
-**Resolution**: Fixed by passing `-Dsamjdk.snappy.disable=true` to picard (default `main` since PR #2). HTSJDK falls back to GZIP, which is present.
+**Resolution**: Fixed by passing `-Dsamjdk.snappy.disable=true` to picard
+(default on `main` since PR #2). HTSJDK falls back to GZIP, which is present.
 
 ## Container Issues
 
