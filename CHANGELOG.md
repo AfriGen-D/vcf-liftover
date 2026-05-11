@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `modules/prepare_vcf_for_picard.nf`: BCF→VCF.gz prep step under `vcf_processing` label, runs ahead of `PICARD_LIFTOVER` and symlinks for `.vcf.gz` inputs.
+- `modules/count_lifted_variants.nf`: `bcftools`-based variant count step that appends `Lifted variants:` / `Rejected variants:` / `REF/ALT swapped variants:` to the Picard log, under `vcf_processing` label.
+
+### Changed
+- **`PICARD_LIFTOVER` now calls `picard LiftoverVcf` directly** instead of `gatk LiftoverVcf`. Same algorithm (GATK4 wraps Picard for this tool) but no longer requires the ~2.3 GB `broadinstitute/gatk` image — the existing 250 MB `mamana/picard:3.3.0` is sufficient.
+- `conf/k8s.config`: `vcf_processing` → `mamana/vcf-processing:latest` (was `mamana/picard:3.3.0` which has no `bcftools`).
+- `conf/docker.config`: `vcf_processing` → `mamana/vcf-processing:latest`, `picard` → `mamana/picard:3.3.0` (was `broadinstitute/gatk:4.5.0.0`).
+- `workflows/liftover.nf`: Picard pathway is now `RENAME_CHROMOSOMES` → `PREPARE_VCF_FOR_PICARD` → `PICARD_LIFTOVER` → `COUNT_LIFTED_VARIANTS`, so each process runs in a container that has every tool it calls.
+- `nextflow.config:35`: `"${HOME}/.singularity"` → `"${System.getenv('HOME')}/.singularity"` (Nextflow 26.x rejects the older syntax).
+
+### Fixed
+- **`GENERATE_CHR_MAPPING` no longer dies with misleading "Could not extract chromosomes from VCF" on the k8s profile.** Root cause was a 2026-04-14 regression in `conf/k8s.config` that mapped `vcf_processing` to a container without `bcftools`; the `bcftools query ... 2>/dev/null | sort -u` then produced empty stdout and the script emitted a misleading user-facing error. Every k8s vcf-liftover run had been failing this way for ~4 weeks. The `2>/dev/null` is also removed so the next regression of this kind surfaces immediately.
+- **`PICARD_LIFTOVER` now uses `set -o pipefail`** so picard's exit code isn't swallowed by `tee`'s in `picard ... 2>&1 | tee log`. Previously a picard exception would still leave the bash script logging "Picard LiftoverVcf completed".
+- **Disabled HTSJDK Snappy native-lib compression for picard temp streams** (`-Dsamjdk.snappy.disable=true`). `mamana/picard:3.3.0` lacks `libsnappy`, so `SortingCollection.spillToDisk()` crashed once `MAX_RECORDS_IN_RAM=100000` was exceeded (which it is for any realistic input). HTSJDK falls back to GZIP, which is in the container.
+
 ## [2.0.0] - 2026-03-06
 
 ### Added - Picard LiftoverVcf Engine
