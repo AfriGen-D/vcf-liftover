@@ -35,7 +35,10 @@ process PICARD_LIFTOVER {
     echo "Chain file: ${chain_file}"
     echo "Target FASTA: ${target_fasta}"
 
-    _JAVA_OPTIONS="${java_mem}" picard LiftoverVcf \\
+    # snappy.disable: mamana/picard:3.3.0 lacks libsnappy native binary, so
+    # the spill-to-disk path in SortingCollection crashes once MAX_RECORDS_IN_RAM
+    # is exceeded. Falling back to GZIP for temp streams is fine.
+    _JAVA_OPTIONS="${java_mem} -Dsamjdk.snappy.disable=true" picard LiftoverVcf \\
         -I ${vcf} \\
         -O ${sample_id}.lifted.vcf.gz \\
         -C ${chain_file} \\
