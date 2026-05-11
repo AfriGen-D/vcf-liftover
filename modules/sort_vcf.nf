@@ -14,7 +14,7 @@ process SORT_VCF {
     tuple val(sample_id), path(vcf)
 
     output:
-    tuple val(sample_id), path("${sample_id}.sorted.bcf"), emit: vcf
+    tuple val(sample_id), path("${sample_id}.sorted.vcf.gz"), emit: vcf
 
     script:
     """
@@ -32,7 +32,7 @@ process SORT_VCF {
     
     # Convert to BCF and sort
     echo "Converting VCF to BCF format..."
-    bcftools view ${vcf} -Ob -o temp.bcf
+    bcftools view ${vcf} -Oz -o temp.vcf.gz
     
     if [ \$? -ne 0 ]; then
         echo "ERROR: Failed to convert VCF to BCF for sample ${sample_id}" >&2
@@ -40,7 +40,7 @@ process SORT_VCF {
     fi
     
     echo "Sorting BCF file..."
-    bcftools sort temp.bcf -T tmp_sort -Ob -o ${sample_id}.sorted.bcf
+    bcftools sort temp.vcf.gz -T tmp_sort -Oz -o ${sample_id}.sorted.vcf.gz
     
     if [ \$? -ne 0 ]; then
         echo "ERROR: Failed to sort BCF for sample ${sample_id}" >&2
@@ -48,21 +48,21 @@ process SORT_VCF {
     fi
     
     # Verify output file was created
-    if [ ! -f "${sample_id}.sorted.bcf" ]; then
+    if [ ! -f "${sample_id}.sorted.vcf.gz" ]; then
         echo "ERROR: Sorted BCF file not created for sample ${sample_id}" >&2
         exit 1
     fi
     
     # Clean up temporary files
-    rm -f temp.bcf
+    rm -f temp.vcf.gz
     rm -rf tmp_sort
     
     echo "VCF sorting completed successfully for sample: ${sample_id}"
-    echo "Output BCF: ${sample_id}.sorted.bcf"
+    echo "Output BCF: ${sample_id}.sorted.vcf.gz"
     
     # Count variants
     if command -v bcftools &> /dev/null; then
-        variant_count=\$(bcftools view -H ${sample_id}.sorted.bcf | wc -l)
+        variant_count=\$(bcftools view -H ${sample_id}.sorted.vcf.gz | wc -l)
         echo "Sorted variants: \$variant_count"
     fi
     """

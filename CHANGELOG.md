@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-03-06
+
+### Added - Picard LiftoverVcf Engine
+- **GATK/Picard LiftoverVcf** as the default liftover tool, replacing CrossMap
+- `--liftover_tool` parameter to select between `picard` (default) and `crossmap` (legacy)
+- `--RECOVER_SWAPPED_REF_ALT true`: Correctly handles REF/ALT swaps when the reference allele changes between genome builds
+- `--WRITE_ORIGINAL_POSITION true`: Preserves original coordinates in INFO field
+- `--WRITE_ORIGINAL_ALLELES true`: Preserves original alleles in INFO field
+- `modules/picard_liftover.nf`: New Picard LiftoverVcf process
+- `modules/filter_rejected.nf`: Rejected variant analysis and summary
+- Rejected variants output with detailed rejection reasons
+
+### Changed
+- **Default liftover tool changed from CrossMap to Picard** (breaking change)
+- Workflow reordered for Picard: chromosome renaming now happens BEFORE liftover (Picard requires matching contig names)
+- Container: `broadinstitute/gatk:4.5.0.0` for the `picard` label
+- Memory allocation: 32GB default for Picard (loads full reference genome)
+- Java heap: automatically calculated as `task.memory - 4GB`
+
+### Fixed
+- **REF/ALT swap handling**: CrossMap sets ALT="." when the reference allele changes between builds, silently losing variants. Picard correctly swaps REF/ALT and flips genotypes. On chr7 alone, 1,995 variants were affected, including pharmacogenomically critical rs776746 (CYP3A5*3).
+- **Genotype consistency**: Picard flips genotypes when swapping REF/ALT (e.g., B37 1/1 becomes 0/0 when the old ALT becomes the new REF), ensuring genotype calls remain semantically correct.
+
+### Backward Compatibility
+- CrossMap is still available via `--liftover_tool crossmap`
+- All existing input formats (single VCF, multiple VCFs, CSV) remain supported
+- All validation features from v1.1.0 are preserved
+
 ## [1.1.0] - 2025-10-24
 
 ### Added - Validation Enhancements

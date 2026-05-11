@@ -2,7 +2,10 @@
 ========================================================================================
     Main Liftover Workflow
 ========================================================================================
-    Orchestrates the complete VCF liftover process
+    Orchestrates the complete VCF liftover process.
+    v2.0.0: Uses Picard LiftoverVcf (default) or CrossMap (legacy).
+    Picard correctly handles REF/ALT swaps when the reference allele changes
+    between genome builds.
 ========================================================================================
 */
 
@@ -12,6 +15,8 @@ include { INPUT_CHECK } from '../modules/input_check'
 include { VALIDATE_CHROMOSOMES } from '../modules/validate_chromosomes'
 include { CHECK_BUILD_MISMATCH } from '../modules/check_build_mismatch'
 include { CROSSMAP_VCF } from '../modules/crossmap'
+include { PICARD_LIFTOVER } from '../modules/picard_liftover'
+include { FILTER_REJECTED } from '../modules/filter_rejected'
 include { SORT_VCF } from '../modules/sort_vcf'
 include { GENERATE_CHR_MAPPING } from '../modules/generate_chr_mapping'
 include { RENAME_CHROMOSOMES } from '../modules/rename_chromosomes'
@@ -19,6 +24,7 @@ include { FIX_CONTIG_HEADER } from '../modules/fix_contig'
 include { INDEX_VCF } from '../modules/index_vcf'
 include { VALIDATE_VCF } from '../modules/validate_vcf'
 include { LIFTOVER_STATS } from '../modules/liftover_stats'
+include { GENERATE_REPORT } from '../modules/generate_report'
 
 workflow LIFTOVER_WORKFLOW {
     take:
@@ -35,14 +41,15 @@ workflow LIFTOVER_WORKFLOW {
     // Parse CSV to get VCF files
     validated_csv = INPUT_CHECK(INPUT_HANDLER.out.csv)
 
-    // Validate chromosome compatibility before running liftover
+    // Reference files
     target_fasta_fai = file("${target_fasta}.fai")
-    VALIDATE_CHROMOSOMES(validated_csv, target_fasta, target_fasta_fai)
+    target_fasta_dict = file("${target_fasta}".replaceAll(/\.fasta$|\.fa$/, '.dict'))
 
     log.info """
     ========================================
      Starting Liftover Workflow
     ========================================
+    Liftover tool: ${params.liftover_tool}
     Chain file: ${chain_file}
     Target FASTA: ${target_fasta}
     Chr mapping: ${chr_mapping ?: 'None'}
@@ -50,7 +57,7 @@ workflow LIFTOVER_WORKFLOW {
     """.stripIndent()
 
     // Convert CSV to channel of tuples
-    vcf_files = VALIDATE_CHROMOSOMES.out.csv
+    vcf_files = validated_csv
         .splitCsv(header: true)
         .map { row -> [row.sample_id, file(row.vcf_path)] }
 
@@ -59,7 +66,6 @@ workflow LIFTOVER_WORKFLOW {
         log.info "Step 0: Checking genome build compatibility..."
         CHECK_BUILD_MISMATCH(vcf_files, chain_file, target_fasta)
 
-        // Check for build mismatch markers
         CHECK_BUILD_MISMATCH.out.marker
             .collect()
             .subscribe { markers ->
@@ -78,38 +84,24 @@ Build mismatch detected in ${markers.size()} sample(s).
 Check the build compatibility reports in:
   ${params.outdir}/build_reports/
 
-Solutions:
-  • Verify your VCF genome build matches the chain file source build
-  • Use the correct chain file for your data
-  • Convert your VCF to the expected build first
-
-Common Examples:
-  • If VCF is hg38 but you want hg19: Use hg38ToHg19.over.chain.gz
-  • If VCF is hg19 and you want hg38: Use hg19ToHg38.over.chain.gz
-  • If VCF is already at target build: No liftover needed!
-
 To bypass this check (NOT RECOMMENDED):
   nextflow run main.nf --check_build_compatibility false ...
 """
-                    // Gracefully exit (not error code, just stop)
                     System.exit(0)
                 }
             }
 
-        // Filter out failed samples based on build check status
         build_check_status = CHECK_BUILD_MISMATCH.out.status
             .map { sample_id, check_type, status_file ->
                 def status = status_file.text.trim()
                 [sample_id, status]
             }
 
-        // Only proceed with samples that passed build check
         vcf_files_filtered = vcf_files
             .join(build_check_status)
             .filter { sample_id, vcf, status -> status == 'PASSED' }
             .map { sample_id, vcf, status -> [sample_id, vcf] }
 
-        // Log filtered samples
         vcf_files_filtered.count().subscribe { count ->
             if (count == 0) {
                 log.error "All samples failed build compatibility check. Cannot proceed."
@@ -122,82 +114,152 @@ To bypass this check (NOT RECOMMENDED):
         vcf_files_for_liftover = vcf_files_filtered
     } else {
         log.warn "Build compatibility check DISABLED - proceeding without validation"
-        log.warn "WARNING: This may produce incorrect results if builds don't match!"
         vcf_files_for_liftover = vcf_files
     }
 
-    // Combine inputs for CrossMap
-    crossmap_input = vcf_files_for_liftover.map { sample_id, vcf ->
-        [sample_id, vcf, chain_file, target_fasta]
-    }
+    // =========================================================================
+    // Liftover tool selection: picard (default) or crossmap (legacy)
+    // =========================================================================
 
-    // Step 1: Run CrossMap liftover
-    log.info "Step 1: Running CrossMap liftover..."
-    CROSSMAP_VCF(crossmap_input)
+    if (params.liftover_tool == 'picard') {
+        // -----------------------------------------------------------------
+        // PICARD LIFTOVER PATHWAY (v2.0.0 default)
+        // -----------------------------------------------------------------
+        // Picard requires chr-prefixed contigs matching the chain file,
+        // so chromosome renaming must happen BEFORE liftover.
+        // -----------------------------------------------------------------
 
-    // Step 2: Sort VCF files
-    log.info "Step 2: Sorting VCF files..."
-    SORT_VCF(CROSSMAP_VCF.out.vcf)
-
-    // Step 3: Generate or use chromosome mapping
-    if (chr_mapping && !chr_mapping.isEmpty()) {
-        // User provided a custom mapping file
-        log.info "Step 3: Using user-provided chromosome mapping..."
-
-        // Create channel with mapping for each sample
-        sorted_with_mapping = SORT_VCF.out.vcf.map { sample_id, vcf ->
-            [sample_id, vcf, chr_mapping]
+        // Step 1: Generate or use chromosome mapping
+        if (chr_mapping && !chr_mapping.isEmpty()) {
+            log.info "Step 1: Using user-provided chromosome mapping..."
+            vcf_with_mapping = vcf_files_for_liftover.map { sample_id, vcf ->
+                [sample_id, vcf, chr_mapping]
+            }
+        } else {
+            log.info "Step 1: Auto-generating chromosome mapping..."
+            GENERATE_CHR_MAPPING(vcf_files_for_liftover, target_fasta_fai)
+            vcf_with_mapping = vcf_files_for_liftover.join(
+                GENERATE_CHR_MAPPING.out.mapping
+            ).map { sample_id, vcf, mapping ->
+                [sample_id, vcf, mapping]
+            }
         }
+
+        // Step 2: Rename chromosomes (before Picard liftover)
+        log.info "Step 2: Renaming chromosomes..."
+        RENAME_CHROMOSOMES(vcf_with_mapping)
+
+        // Step 3: Run Picard LiftoverVcf
+        log.info "Step 3: Running Picard LiftoverVcf..."
+        picard_input = RENAME_CHROMOSOMES.out.vcf.map { sample_id, vcf ->
+            [sample_id, vcf, chain_file, target_fasta, target_fasta_fai, target_fasta_dict]
+        }
+        PICARD_LIFTOVER(picard_input)
+
+        // Step 4: Analyze rejected variants
+        log.info "Step 4: Analyzing rejected variants..."
+        FILTER_REJECTED(PICARD_LIFTOVER.out.rejected)
+
+        // Step 5: Sort lifted VCF
+        log.info "Step 5: Sorting lifted VCF files..."
+        SORT_VCF(PICARD_LIFTOVER.out.vcf)
+
+        // Step 6: Fix contig headers
+        log.info "Step 6: Fixing contig headers..."
+        FIX_CONTIG_HEADER(SORT_VCF.out.vcf, target_fasta)
+
+        liftover_logs = PICARD_LIFTOVER.out.log
+
     } else {
-        // Auto-generate chromosome mapping based on VCF and reference
-        log.info "Step 3: Auto-generating chromosome mapping..."
-        GENERATE_CHR_MAPPING(SORT_VCF.out.vcf, target_fasta_fai)
+        // -----------------------------------------------------------------
+        // CROSSMAP PATHWAY (legacy v1.0.0 behavior)
+        // -----------------------------------------------------------------
 
-        // Combine sorted VCF with generated mapping
-        sorted_with_mapping = SORT_VCF.out.vcf.join(
-            GENERATE_CHR_MAPPING.out.mapping
-        ).map { sample_id, vcf, mapping ->
-            [sample_id, vcf, mapping]
+        // Step 1: Run CrossMap liftover
+        log.info "Step 1: Running CrossMap liftover..."
+        crossmap_input = vcf_files_for_liftover.map { sample_id, vcf ->
+            [sample_id, vcf, chain_file, target_fasta]
         }
+        CROSSMAP_VCF(crossmap_input)
+
+        // Step 2: Sort VCF files
+        log.info "Step 2: Sorting VCF files..."
+        SORT_VCF(CROSSMAP_VCF.out.vcf)
+
+        // Step 3: Generate or use chromosome mapping
+        if (chr_mapping && !chr_mapping.isEmpty()) {
+            log.info "Step 3: Using user-provided chromosome mapping..."
+            sorted_with_mapping = SORT_VCF.out.vcf.map { sample_id, vcf ->
+                [sample_id, vcf, chr_mapping]
+            }
+        } else {
+            log.info "Step 3: Auto-generating chromosome mapping..."
+            GENERATE_CHR_MAPPING(SORT_VCF.out.vcf, target_fasta_fai)
+            sorted_with_mapping = SORT_VCF.out.vcf.join(
+                GENERATE_CHR_MAPPING.out.mapping
+            ).map { sample_id, vcf, mapping ->
+                [sample_id, vcf, mapping]
+            }
+        }
+
+        // Step 4: Rename chromosomes
+        log.info "Step 4: Renaming chromosomes..."
+        RENAME_CHROMOSOMES(sorted_with_mapping)
+
+        // Step 5: Fix contig headers
+        log.info "Step 5: Fixing contig headers..."
+        FIX_CONTIG_HEADER(RENAME_CHROMOSOMES.out.vcf, target_fasta)
+
+        liftover_logs = CROSSMAP_VCF.out.log
     }
 
-    // Step 4: Rename chromosomes using mapping (always performed now)
-    log.info "Step 4: Renaming chromosomes..."
-    RENAME_CHROMOSOMES(sorted_with_mapping)
-    sorted_vcf = RENAME_CHROMOSOMES.out.vcf
+    // =========================================================================
+    // Common final steps
+    // =========================================================================
 
-    // Step 5: Fix contig headers
-    log.info "Step 5: Fixing contig headers..."
-    FIX_CONTIG_HEADER(sorted_vcf, target_fasta)
-
-    // Step 6: Index final VCF files
-    log.info "Step 6: Indexing VCF files..."
+    // Step N-2: Index final VCF files
+    log.info "Indexing VCF files..."
     INDEX_VCF(FIX_CONTIG_HEADER.out.vcf)
 
-    // Step 7: Validate output if requested
+    // Step N-1: Validate output if requested
     if (params.validate_output) {
-        log.info "Step 7: Validating output VCF files..."
+        log.info "Validating output VCF files..."
         VALIDATE_VCF(INDEX_VCF.out.vcf_with_index)
         validation_reports = VALIDATE_VCF.out.report
     } else {
-        log.info "Step 7: Skipping validation (validate_output = false)"
         validation_reports = Channel.empty()
     }
 
-    // Step 8: Generate comprehensive statistics
-    log.info "Step 8: Generating liftover statistics..."
+    // Step N: Generate comprehensive statistics
+    log.info "Generating liftover statistics..."
     LIFTOVER_STATS(
-        CROSSMAP_VCF.out.log.collect(),
+        liftover_logs.collect(),
         INDEX_VCF.out.vcf_with_index.map { _sample_id, vcf, _index -> vcf }.collect()
     )
 
+    // Step N+1: Generate HTML report (Picard pathway only)
+    if (params.liftover_tool == 'picard') {
+        log.info "Generating HTML report..."
+        nf_config = file("${projectDir}/nextflow.config")
+        GENERATE_REPORT(
+            PICARD_LIFTOVER.out.log.collect(),
+            FILTER_REJECTED.out.summary.map { _id, txt -> txt }.collect(),
+            nf_config
+        )
+        html_report = GENERATE_REPORT.out.report
+        pdf_report = GENERATE_REPORT.out.pdf
+    } else {
+        html_report = Channel.empty()
+        pdf_report = Channel.empty()
+    }
+
     emit:
-    // Final outputs
     vcf = INDEX_VCF.out.vcf_with_index
     stats = LIFTOVER_STATS.out.report
-    logs = CROSSMAP_VCF.out.log
-    unmap = CROSSMAP_VCF.out.unmap
+    logs = liftover_logs
     validation = validation_reports
     summary_csv = LIFTOVER_STATS.out.csv
     summary_stats = LIFTOVER_STATS.out.stats
+    html = html_report
+    pdf = pdf_report
 }
