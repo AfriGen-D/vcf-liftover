@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `--fix_mismatched_ref` toggle (opt-in, default `false`) + new `--source_fasta` param. When enabled, runs `bcftools +fixref -m flip -d` against the source build's reference before liftover — flips REF/ALT for variants where alleles are merely on the opposite strand, drops the rest. New module `modules/fix_mismatched_ref.nf` under `vcf_processing` label. Wired into the Picard pathway in `workflows/liftover.nf` between the build-compat check and `GENERATE_CHR_MAPPING`.
+- `FILTER_REJECTED` now emits a remediation hint to `rejected_summary.txt` when `MismatchedRefAllele` is the dominant rejection reason (≥100 absolute, ≥100 total, ≥50% of rejections), pointing at the new `--fix_mismatched_ref` toggle so users don't have to discover the workaround manually.
 - `modules/prepare_vcf_for_picard.nf`: BCF→VCF.gz prep step under `vcf_processing` label, runs ahead of `PICARD_LIFTOVER` and symlinks for `.vcf.gz` inputs.
 - `modules/count_lifted_variants.nf`: `bcftools`-based variant count step that appends `Lifted variants:` / `Rejected variants:` / `REF/ALT swapped variants:` to the Picard log, under `vcf_processing` label.
 
