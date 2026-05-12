@@ -255,15 +255,54 @@ workflow {
         helpMessage()
         exit 1
     }
+
+    // Auto-derive chain_file / target_fasta from (source_build, target_build)
+    // when the caller didn't pass them explicitly. The 2026-05-12 prod
+    // incident (PR #4) was caused by these being a separate, independently-
+    // settable UI dropdown: a hg19 -> hg38 submission inherited the legacy
+    // hg38ToHg19 chain default and produced 270k MismatchedRefAllele
+    // rejections with 22 MB of silently corrupt output. Deriving from the
+    // build pair makes the misconfiguration unrepresentable. Lookup tables
+    // live here (not nextflow.config) because Nextflow's config DSL rejects
+    // top-level `def` declarations.
+    def CHAIN_FILES = [
+        'hg17->hg18': 'hg17ToHg18.over.chain.gz',
+        'hg17->hg19': 'hg17ToHg19.over.chain.gz',
+        'hg18->hg19': 'hg18ToHg19.over.chain.gz',
+        'hg18->hg38': 'hg18ToHg38.over.chain.gz',
+        'hg19->hg18': 'hg19ToHg18.over.chain.gz',
+        'hg19->hg38': 'hg19ToHg38.over.chain.gz',
+        'hg38->hg19': 'hg38ToHg19.over.chain.gz',
+        'b37->hg38':  'b37ToHg38.over.chain.gz',
+    ]
+    def FASTA_FILES = [
+        'hg18': 'GRCh36/hg18.fasta',
+        'hg19': 'GRCh37/hg19.fasta',
+        'hg38': 'GRCh38/hg38.fasta',
+    ]
     if (!params.chain_file) {
-        log.error "ERROR: --chain_file parameter is required"
-        helpMessage()
-        exit 1
+        def key = "${params.source_build}->${params.target_build}"
+        def chain_name = CHAIN_FILES[key]
+        if (!chain_name) {
+            log.error "No chain file registered for build pair '${key}'. " +
+                "Supported pairs: ${CHAIN_FILES.keySet().sort().join(', ')}. " +
+                "Pass --chain_file explicitly or extend CHAIN_FILES in main.nf."
+            exit 1
+        }
+        params.chain_file = "${params.chain_files_dir}/${chain_name}"
+        log.info "Auto-derived chain_file for ${key}: ${params.chain_file}"
     }
     if (!params.target_fasta) {
-        log.error "ERROR: --target_fasta parameter is required"
-        helpMessage()
-        exit 1
+        def fasta_name = FASTA_FILES[params.target_build]
+        if (!fasta_name) {
+            log.error "No reference FASTA registered for target_build " +
+                "'${params.target_build}'. Supported targets: " +
+                "${FASTA_FILES.keySet().sort().join(', ')}. " +
+                "Pass --target_fasta explicitly or extend FASTA_FILES in main.nf."
+            exit 1
+        }
+        params.target_fasta = "${params.fasta_files_dir}/${fasta_name}"
+        log.info "Auto-derived target_fasta for ${params.target_build}: ${params.target_fasta}"
     }
 
     // Validate input files exist before starting workflow
