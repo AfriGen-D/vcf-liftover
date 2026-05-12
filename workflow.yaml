@@ -104,6 +104,15 @@ workflow:
     validate_output: false
     liftover_tool: picard
 
+  # Nextflow `-profile` to pass at submission time. The AfriGen-D WES
+  # runner is a k3s pod with no local Docker daemon -- jobs that
+  # default to `profile: docker` (the FedImpute service-level
+  # fallback) fail with "Cannot connect to the Docker daemon at
+  # unix:///var/run/docker.sock". `k8s` delegates each process to a
+  # per-task K8s pod, which is the supported path.
+  engine_parameters:
+    profile: k8s
+
   # Input VCF param name for this pipeline
   input_param: input
 
