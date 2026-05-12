@@ -19,7 +19,26 @@ from pathlib import Path
 
 
 def parse_crossmap_log(log_file):
-    """Parse CrossMap log file for statistics"""
+    """Parse a per-sample liftover log for statistics.
+
+    Recognises BOTH log formats:
+
+    - **CrossMap** (legacy v1.0.0 path): `Total entries: N`, `Failed to map: N`.
+      The function name preserves the original API; the file extension
+      stripped here is `.crossmap`.
+    - **Picard** (default since v2.0.0): the `COUNT_LIFTED_VARIANTS`
+      module appends `Lifted variants: N`, `Rejected variants: N`, and
+      `REF/ALT swapped variants: N` to the picard log via bcftools.
+      Without parsing these, every Picard-pathway run wrote zeros to
+      `liftover_statistics.txt` (the 2026-05-12 vcf-liftover regression --
+      QC card showed `Total Samples: 0` etc. on Jacqui's job 68f20bcf
+      that actually lifted 542,806 variants).
+
+    Picard's lifted/rejected/swapped count tuple is the source of truth
+    when present; we synthesise `input_variants` = `lifted + rejected`
+    (the count BEFORE liftover that the picard log actually saw, with
+    swaps already counted in `lifted`).
+    """
     stats = {
         'sample_id': '',
         'input_variants': 0,
@@ -33,24 +52,41 @@ def parse_crossmap_log(log_file):
         with open(log_file, 'r') as f:
             content = f.read()
 
-        # Extract sample ID from filename
-        stats['sample_id'] = Path(log_file).stem.replace('.crossmap', '')
+        # Extract sample ID from filename. Handles `.crossmap.log` (CrossMap
+        # pathway) and `.picard.log` (Picard pathway, v2.0.0+).
+        stats['sample_id'] = (
+            Path(log_file).stem.replace('.crossmap', '').replace('.picard', '')
+        )
 
-        # Look for variant counts in log
-        input_match = re.search(r'Total entries:\s*(\d+)', content)
-        if input_match:
-            stats['input_variants'] = int(input_match.group(1))
+        # Picard pathway: the COUNT_LIFTED_VARIANTS module emits three
+        # explicit count lines at the end of the picard log.
+        lifted_match = re.search(r'Lifted variants:\s*(\d+)', content)
+        rejected_match = re.search(r'Rejected variants:\s*(\d+)', content)
+        swapped_match = re.search(r'REF/ALT swapped variants:\s*(\d+)', content)
+        if lifted_match or rejected_match:
+            lifted = int(lifted_match.group(1)) if lifted_match else 0
+            rejected = int(rejected_match.group(1)) if rejected_match else 0
+            stats['output_variants'] = lifted
+            stats['unmapped_variants'] = rejected
+            stats['input_variants'] = lifted + rejected
+            if swapped_match:
+                stats['ref_alt_swapped'] = int(swapped_match.group(1))
+        else:
+            # CrossMap pathway: legacy format. "Total entries:" then
+            # "Failed to map: N".
+            input_match = re.search(r'Total entries:\s*(\d+)', content)
+            if input_match:
+                stats['input_variants'] = int(input_match.group(1))
 
-        # Look for failed liftover count (CrossMap format: "Failed to map: 47")
-        failed_match = re.search(r'Failed to map:\s*(\d+)', content)
-        if failed_match:
-            stats['unmapped_variants'] = int(failed_match.group(1))
+            failed_match = re.search(r'Failed to map:\s*(\d+)', content)
+            if failed_match:
+                stats['unmapped_variants'] = int(failed_match.group(1))
 
-        # Calculate successful liftover count
-        if stats['input_variants'] > 0 and stats['unmapped_variants'] >= 0:
-            stats['output_variants'] = stats['input_variants'] - stats['unmapped_variants']
+            if stats['input_variants'] > 0 and stats['unmapped_variants'] >= 0:
+                stats['output_variants'] = stats['input_variants'] - stats['unmapped_variants']
 
-        # Calculate success rate
+        # Calculate success rate (works for both pathways now that
+        # input_variants + output_variants are populated).
         if stats['input_variants'] > 0:
             stats['success_rate'] = (stats['output_variants'] / stats['input_variants']) * 100
 
