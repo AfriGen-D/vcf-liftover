@@ -49,18 +49,18 @@ workflow:
     - id: source_build
       description: Source Genome Build
       type: list
-      value: hg38
-      values:
-        hg38: hg38/GRCh38/b38
-        hg19: hg19/GRCh37/b37
-
-    - id: target_build
-      description: Target Genome Build
-      type: list
       value: hg19
       values:
         hg19: hg19/GRCh37/b37
         hg38: hg38/GRCh38/b38
+
+    - id: target_build
+      description: Target Genome Build
+      type: list
+      value: hg38
+      values:
+        hg38: hg38/GRCh38/b38
+        hg19: hg19/GRCh37/b37
 
     # Chain file and target FASTA are NOT exposed as separate dropdowns
     # because they are derived from (source_build, target_build) at config
@@ -98,8 +98,8 @@ workflow:
   # from source_build / target_build, so any value listed here would just
   # be overridden anyway.
   defaults:
-    source_build: hg38
-    target_build: hg19
+    source_build: hg19
+    target_build: hg38
     split_by_chr: false
     validate_output: false
     liftover_tool: picard
