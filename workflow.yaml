@@ -40,6 +40,10 @@ workflow:
       label: Indexing & Stats
       processes: [INDEX_VCF, LIFTOVER_STATS, GENERATE_REPORT]
       expected_tasks: 3
+    - id: split_by_chr
+      label: Split by Chromosome
+      processes: [SPLIT_BY_CHR]
+      expected_tasks: 1
 
   inputs:
     - id: source_build
@@ -58,21 +62,23 @@ workflow:
         hg19: hg19/GRCh37/b37
         hg38: hg38/GRCh38/b38
 
-    - id: chain_file
-      description: Liftover Chain File
-      type: list
-      value: /mnt/impute-storage/apps/references/chain_files/hg38ToHg19.over.chain.gz
-      values:
-        /mnt/impute-storage/apps/references/chain_files/hg38ToHg19.over.chain.gz: "hg38 -> hg19"
-        /mnt/impute-storage/apps/references/chain_files/hg19ToHg38.over.chain.gz: "hg19 -> hg38"
+    # Chain file and target FASTA are NOT exposed as separate dropdowns
+    # because they are derived from (source_build, target_build) at config
+    # load time in nextflow.config. Exposing them led to user error: a
+    # 2026-05-12 production submission asked for hg19 -> hg38 but left the
+    # default chain (hg38ToHg19), and the pipeline silently produced 22 MB
+    # of corrupt output (270k MismatchedRefAllele rejections). Auto-deriving
+    # makes that misconfiguration unrepresentable from the UI.
 
-    - id: target_fasta
-      description: Target Reference Genome
-      type: list
-      value: /mnt/impute-storage/apps/references/human/GRCh37/hg19.fasta
-      values:
-        /mnt/impute-storage/apps/references/human/GRCh37/hg19.fasta: GRCh37/hg19
-        /mnt/impute-storage/apps/references/human/GRCh38/hg38.fasta: GRCh38/hg38
+    - id: split_by_chr
+      description: Split output by chromosome
+      details: >
+        Produces one VCF per chromosome (chr1.vcf.gz, chr2.vcf.gz, ...) in
+        a per_chromosome/ directory alongside the merged output. Required
+        if you plan to submit the lifted file to Genotype Imputation, which
+        rejects multi-chromosome VCFs.
+      type: checkbox
+      value: false
 
     - id: validate_output
       description: Validate Output
@@ -87,12 +93,14 @@ workflow:
         picard: "Picard LiftoverVcf (recommended)"
         crossmap: "CrossMap (legacy)"
 
-  # Default Nextflow params merged with user selections
+  # Default Nextflow params merged with user selections. chain_file and
+  # target_fasta are intentionally omitted: nextflow.config derives them
+  # from source_build / target_build, so any value listed here would just
+  # be overridden anyway.
   defaults:
-    chain_file: /mnt/impute-storage/apps/references/chain_files/hg38ToHg19.over.chain.gz
     source_build: hg38
     target_build: hg19
-    target_fasta: /mnt/impute-storage/apps/references/human/GRCh37/hg19.fasta
+    split_by_chr: false
     validate_output: false
     liftover_tool: picard
 

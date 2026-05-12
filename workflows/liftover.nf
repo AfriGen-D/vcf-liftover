@@ -28,6 +28,7 @@ include { INDEX_VCF } from '../modules/index_vcf'
 include { VALIDATE_VCF } from '../modules/validate_vcf'
 include { LIFTOVER_STATS } from '../modules/liftover_stats'
 include { GENERATE_REPORT } from '../modules/generate_report'
+include { SPLIT_BY_CHR } from '../modules/split_by_chr'
 
 workflow LIFTOVER_WORKFLOW {
     take:
@@ -250,6 +251,21 @@ To bypass this check (NOT RECOMMENDED):
     log.info "Indexing VCF files..."
     INDEX_VCF(FIX_CONTIG_HEADER.out.vcf)
 
+    // Step N-1a: Optional per-chromosome split. Downstream consumers like
+    // imputationserver2 reject multi-chromosome VCFs ("The provided VCF file
+    // contains more than one chromosome"); enabling this produces a ready-
+    // to-submit per_chromosome/<basename>.<chr>.vcf.gz set alongside the
+    // merged output.
+    if (params.split_by_chr) {
+        log.info "Splitting output by chromosome..."
+        SPLIT_BY_CHR(INDEX_VCF.out.vcf_with_index)
+        per_chromosome_vcfs = SPLIT_BY_CHR.out.split_vcfs
+        per_chromosome_split_summary = SPLIT_BY_CHR.out.summary
+    } else {
+        per_chromosome_vcfs = Channel.empty()
+        per_chromosome_split_summary = Channel.empty()
+    }
+
     // Step N-1: Validate output if requested
     if (params.validate_output) {
         log.info "Validating output VCF files..."
@@ -284,6 +300,8 @@ To bypass this check (NOT RECOMMENDED):
 
     emit:
     vcf = INDEX_VCF.out.vcf_with_index
+    per_chromosome = per_chromosome_vcfs
+    per_chromosome_split_summary = per_chromosome_split_summary
     stats = LIFTOVER_STATS.out.report
     logs = liftover_logs
     validation = validation_reports
