@@ -405,7 +405,13 @@ workflow {
 ========================================================================================
 */
 
-workflow.onComplete {
+// Note the `=` -- Nextflow 26 strict mode rejects the parens-less
+// `workflow.onComplete { ... }` shape with
+//   Error: Statements cannot be mixed with script declarations
+// Adding the `=` makes it an assignment of a closure to the handler,
+// which IS a script declaration. Same change applied to workflow.onError
+// below. Behavior identical.
+workflow.onComplete = {
     log.info """
     =========================================
      Pipeline completed!
@@ -418,7 +424,7 @@ workflow.onComplete {
     Error report : ${workflow.errorReport ?: 'None'}
     =========================================
     """.stripIndent()
-    
+
     if (workflow.success) {
         log.info "Pipeline completed successfully!"
         log.info "Results are in: ${params.outdir}"
@@ -454,7 +460,8 @@ def emitStructuredError(Map err) {
     }
 }
 
-workflow.onError {
+// `=` for the same NF 26 strict-mode reason as workflow.onComplete above.
+workflow.onError = {
     log.error "Pipeline failed with error: ${workflow.errorMessage}"
 
     // Best-effort classification of the failure so the FedImpute UI can
