@@ -237,6 +237,89 @@ include { LIFTOVER_WORKFLOW } from './workflows/liftover'
 
 /*
 ========================================================================================
+    AUTO-DERIVATION TABLES FOR chain_file / target_fasta
+========================================================================================
+    Lookup tables consumed by `resolveChainFile()` / `resolveTargetFasta()`
+    below. To support a new build pair, drop the chain file in
+    `params.chain_files_dir`, the target FASTA in `params.fasta_files_dir`,
+    and add the mapping here.
+
+    These exist because the 2026-05-12 prod incident was caused by four
+    independent UI dropdowns (source_build, target_build, chain_file,
+    target_fasta) with no cross-validation: a `hg19 -> hg38` submission
+    inherited the legacy `hg38ToHg19` chain default and `hg19.fasta`
+    target reference, producing 270k MismatchedRefAllele rejections and
+    22 MB of silently-corrupt output. Deriving the two file paths from
+    the (source_build, target_build) pair makes the misconfiguration
+    unrepresentable.
+
+    Why a function rather than mutating `params.chain_file` at script
+    load: Nextflow 25.10.4 silently rejects in-script mutation of params
+    (even at script top level), so an assignment like
+    `params.chain_file = "..."` would log a non-null value but every
+    downstream read still sees null -- which is exactly how the
+    workflow ran at 13:42 UTC on 2026-05-12. The function returns the
+    resolved path; the workflow block uses the return value directly
+    via local variables instead of round-tripping through `params`.
+========================================================================================
+*/
+
+// Bound without `def` so they become script-level globals visible
+// inside `resolveChainFile()` / `resolveTargetFasta()`. A top-level
+// `def` would scope them as locals that the functions can't see,
+// raising `No such property: CHAIN_FILES`.
+CHAIN_FILES = [
+    'hg17->hg18': 'hg17ToHg18.over.chain.gz',
+    'hg17->hg19': 'hg17ToHg19.over.chain.gz',
+    'hg18->hg19': 'hg18ToHg19.over.chain.gz',
+    'hg18->hg38': 'hg18ToHg38.over.chain.gz',
+    'hg19->hg18': 'hg19ToHg18.over.chain.gz',
+    'hg19->hg38': 'hg19ToHg38.over.chain.gz',
+    'hg38->hg19': 'hg38ToHg19.over.chain.gz',
+    'b37->hg38':  'b37ToHg38.over.chain.gz',
+]
+FASTA_FILES = [
+    'hg18': 'GRCh36/hg18.fasta',
+    'hg19': 'GRCh37/hg19.fasta',
+    'hg38': 'GRCh38/hg38.fasta',
+]
+
+def resolveChainFile() {
+    if (params.chain_file) {
+        return params.chain_file
+    }
+    def key = "${params.source_build}->${params.target_build}"
+    def chain_name = CHAIN_FILES[key]
+    if (!chain_name) {
+        log.error "No chain file registered for build pair '${key}'. " +
+            "Supported pairs: ${CHAIN_FILES.keySet().sort().join(', ')}. " +
+            "Pass --chain_file explicitly or extend CHAIN_FILES in main.nf."
+        exit 1
+    }
+    def resolved = "${params.chain_files_dir}/${chain_name}"
+    log.info "Auto-derived chain_file for ${key}: ${resolved}"
+    return resolved
+}
+
+def resolveTargetFasta() {
+    if (params.target_fasta) {
+        return params.target_fasta
+    }
+    def fasta_name = FASTA_FILES[params.target_build]
+    if (!fasta_name) {
+        log.error "No reference FASTA registered for target_build " +
+            "'${params.target_build}'. Supported targets: " +
+            "${FASTA_FILES.keySet().sort().join(', ')}."
+        exit 1
+    }
+    def resolved = "${params.fasta_files_dir}/${fasta_name}"
+    log.info "Auto-derived target_fasta for ${params.target_build}: ${resolved}"
+    return resolved
+}
+
+
+/*
+========================================================================================
     MAIN WORKFLOW
 ========================================================================================
 */
@@ -256,54 +339,12 @@ workflow {
         exit 1
     }
 
-    // Auto-derive chain_file / target_fasta from (source_build, target_build)
-    // when the caller didn't pass them explicitly. The 2026-05-12 prod
-    // incident (PR #4) was caused by these being a separate, independently-
-    // settable UI dropdown: a hg19 -> hg38 submission inherited the legacy
-    // hg38ToHg19 chain default and produced 270k MismatchedRefAllele
-    // rejections with 22 MB of silently corrupt output. Deriving from the
-    // build pair makes the misconfiguration unrepresentable. Lookup tables
-    // live here (not nextflow.config) because Nextflow's config DSL rejects
-    // top-level `def` declarations.
-    def CHAIN_FILES = [
-        'hg17->hg18': 'hg17ToHg18.over.chain.gz',
-        'hg17->hg19': 'hg17ToHg19.over.chain.gz',
-        'hg18->hg19': 'hg18ToHg19.over.chain.gz',
-        'hg18->hg38': 'hg18ToHg38.over.chain.gz',
-        'hg19->hg18': 'hg19ToHg18.over.chain.gz',
-        'hg19->hg38': 'hg19ToHg38.over.chain.gz',
-        'hg38->hg19': 'hg38ToHg19.over.chain.gz',
-        'b37->hg38':  'b37ToHg38.over.chain.gz',
-    ]
-    def FASTA_FILES = [
-        'hg18': 'GRCh36/hg18.fasta',
-        'hg19': 'GRCh37/hg19.fasta',
-        'hg38': 'GRCh38/hg38.fasta',
-    ]
-    if (!params.chain_file) {
-        def key = "${params.source_build}->${params.target_build}"
-        def chain_name = CHAIN_FILES[key]
-        if (!chain_name) {
-            log.error "No chain file registered for build pair '${key}'. " +
-                "Supported pairs: ${CHAIN_FILES.keySet().sort().join(', ')}. " +
-                "Pass --chain_file explicitly or extend CHAIN_FILES in main.nf."
-            exit 1
-        }
-        params.chain_file = "${params.chain_files_dir}/${chain_name}"
-        log.info "Auto-derived chain_file for ${key}: ${params.chain_file}"
-    }
-    if (!params.target_fasta) {
-        def fasta_name = FASTA_FILES[params.target_build]
-        if (!fasta_name) {
-            log.error "No reference FASTA registered for target_build " +
-                "'${params.target_build}'. Supported targets: " +
-                "${FASTA_FILES.keySet().sort().join(', ')}. " +
-                "Pass --target_fasta explicitly or extend FASTA_FILES in main.nf."
-            exit 1
-        }
-        params.target_fasta = "${params.fasta_files_dir}/${fasta_name}"
-        log.info "Auto-derived target_fasta for ${params.target_build}: ${params.target_fasta}"
-    }
+    // Resolve chain_file / target_fasta paths from the build pair when
+    // the caller did not provide them explicitly. Bound to local vars
+    // and passed through channels rather than mutating params, because
+    // Nextflow 25.10.4 silently drops in-script params mutation.
+    def resolved_chain_file = resolveChainFile()
+    def resolved_target_fasta = resolveTargetFasta()
 
     // Validate input files exist before starting workflow
     def validation_error = validateInputFiles(params.input)
@@ -313,16 +354,16 @@ workflow {
     }
 
     // Validate chain file exists
-    def chain_file_obj = file(params.chain_file)
+    def chain_file_obj = file(resolved_chain_file)
     if (!chain_file_obj.exists()) {
-        log.error formatFileNotFoundError(params.chain_file, "Chain file", workflow.launchDir)
+        log.error formatFileNotFoundError(resolved_chain_file, "Chain file", workflow.launchDir)
         exit 1
     }
 
     // Validate target FASTA exists
-    def target_fasta_obj = file(params.target_fasta)
+    def target_fasta_obj = file(resolved_target_fasta)
     if (!target_fasta_obj.exists()) {
-        log.error formatFileNotFoundError(params.target_fasta, "Target FASTA file", workflow.launchDir)
+        log.error formatFileNotFoundError(resolved_target_fasta, "Target FASTA file", workflow.launchDir)
         exit 1
     }
 
@@ -331,8 +372,8 @@ workflow {
      vcf-liftover v${workflow.manifest.version}
     =========================================
     Input           : ${params.input}
-    Chain file      : ${params.chain_file}
-    Target FASTA    : ${params.target_fasta}
+    Chain file      : ${resolved_chain_file}
+    Target FASTA    : ${resolved_target_fasta}
     Source build    : ${params.source_build}
     Target build    : ${params.target_build}
     Chr mapping     : ${params.chr_mapping ?: 'None'}
@@ -345,8 +386,8 @@ workflow {
     // Input channels are already created above
 
     // Prepare reference files
-    chain_file = file(params.chain_file)
-    target_fasta = file(params.target_fasta)
+    chain_file = file(resolved_chain_file)
+    target_fasta = file(resolved_target_fasta)
     chr_mapping = params.chr_mapping ? file(params.chr_mapping) : []
 
     // Run main liftover workflow
