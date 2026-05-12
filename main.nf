@@ -406,40 +406,79 @@ workflow {
         target_fasta,
         chr_mapping
     )
-}
 
-/*
-========================================================================================
-    WORKFLOW COMPLETION
-========================================================================================
-*/
+    // Handlers registered inside the workflow body so they live under a
+    // declaration -- NF 26 strict syntax forbids top-level statements
+    // alongside declarations.
+    workflow.onComplete = {
+        log.info """
+        =========================================
+         Pipeline completed!
+        =========================================
+        Completed at : ${workflow.complete}
+        Duration     : ${workflow.duration}
+        Success      : ${workflow.success}
+        Work dir     : ${workflow.workDir}
+        Exit status  : ${workflow.exitStatus}
+        Error report : ${workflow.errorReport ?: 'None'}
+        =========================================
+        """.stripIndent()
 
-// Note the `=` -- Nextflow 26 strict mode rejects the parens-less
-// `workflow.onComplete { ... }` shape with
-//   Error: Statements cannot be mixed with script declarations
-// Adding the `=` makes it an assignment of a closure to the handler,
-// which IS a script declaration. Same change applied to workflow.onError
-// below. Behavior identical.
-workflow.onComplete = {
-    log.info """
-    =========================================
-     Pipeline completed!
-    =========================================
-    Completed at : ${workflow.complete}
-    Duration     : ${workflow.duration}
-    Success      : ${workflow.success}
-    Work dir     : ${workflow.workDir}
-    Exit status  : ${workflow.exitStatus}
-    Error report : ${workflow.errorReport ?: 'None'}
-    =========================================
-    """.stripIndent()
+        if (workflow.success) {
+            log.info "Pipeline completed successfully!"
+            log.info "Results are in: ${params.outdir}"
+        } else {
+            log.error "Pipeline failed!"
+            log.error "Check the error report above for details"
+        }
+    }
 
-    if (workflow.success) {
-        log.info "Pipeline completed successfully!"
-        log.info "Results are in: ${params.outdir}"
-    } else {
-        log.error "Pipeline failed!"
-        log.error "Check the error report above for details"
+    workflow.onError = {
+        log.error "Pipeline failed with error: ${workflow.errorMessage}"
+
+        // Best-effort classification of the failure so the FedImpute UI can
+        // surface a meaningful code + remediation instead of a bare
+        // "EXECUTOR_ERROR".
+        def msg = (workflow.errorMessage ?: '').toString()
+        def code = 'PIPELINE_FAILED'
+        def severity = 'pipeline_error'
+        def remediation = null
+        def summary = "vcf-liftover pipeline failed"
+
+        if (msg =~ /(?i)GENERATE_CHR_MAPPING.*exit status \(1\)/ ||
+            msg =~ /(?i)Could not extract chromosomes/) {
+            code = 'CHR_EXTRACTION_FAILED'
+            severity = 'user_error'
+            summary = "Could not extract chromosomes from the input VCF. The file may be truncated, missing an index, or in an unsupported format."
+            remediation = [
+                kind: 'retry',
+                hint: 'Verify the VCF opens with `bcftools view` locally, and that it has a .tbi or .csi index if gzipped. Then re-upload.',
+            ]
+        } else if (msg =~ /(?i)LIFTOVER.*exit status \(1\)/) {
+            code = 'LIFTOVER_FAILED'
+            severity = 'user_error'
+            summary = "Liftover process failed. This usually means the source build does not match the chain file."
+            remediation = [
+                kind: 'select_panel',
+                hint: 'Check that the source and target builds correspond to the selected chain file (e.g. hg19 -> hg38 needs hg19ToHg38.over.chain).',
+            ]
+        } else if (msg =~ /(?i)chain.*not found|target_fasta.*not found/) {
+            code = 'MISSING_REFERENCE_FILE'
+            severity = 'pipeline_error'
+            summary = "A required reference file (chain or target FASTA) is missing from the workflow configuration."
+            remediation = [
+                kind: 'contact_support',
+                hint: 'This is a service-side configuration issue; the operator needs to fix the workflow configuration.',
+            ]
+        }
+
+        emitStructuredError([
+            code: code,
+            severity: severity,
+            summary: summary,
+            detail: msg.take(2000),
+            remediation: remediation,
+        ])
     }
 }
 
@@ -469,52 +508,3 @@ def emitStructuredError(Map err) {
     }
 }
 
-// `=` for the same NF 26 strict-mode reason as workflow.onComplete above.
-workflow.onError = {
-    log.error "Pipeline failed with error: ${workflow.errorMessage}"
-
-    // Best-effort classification of the failure so the FedImpute UI can
-    // surface a meaningful code + remediation instead of a bare
-    // "EXECUTOR_ERROR". We look at the workflow error message text and,
-    // where the pattern is unambiguous, assign a specific code.
-    def msg = (workflow.errorMessage ?: '').toString()
-    def code = 'PIPELINE_FAILED'
-    def severity = 'pipeline_error'
-    def remediation = null
-    def summary = "vcf-liftover pipeline failed"
-
-    if (msg =~ /(?i)GENERATE_CHR_MAPPING.*exit status \(1\)/ ||
-        msg =~ /(?i)Could not extract chromosomes/) {
-        code = 'CHR_EXTRACTION_FAILED'
-        severity = 'user_error'
-        summary = "Could not extract chromosomes from the input VCF. The file may be truncated, missing an index, or in an unsupported format."
-        remediation = [
-            kind: 'retry',
-            hint: 'Verify the VCF opens with `bcftools view` locally, and that it has a .tbi or .csi index if gzipped. Then re-upload.',
-        ]
-    } else if (msg =~ /(?i)LIFTOVER.*exit status \(1\)/) {
-        code = 'LIFTOVER_FAILED'
-        severity = 'user_error'
-        summary = "Liftover process failed. This usually means the source build does not match the chain file."
-        remediation = [
-            kind: 'select_panel',
-            hint: 'Check that the source and target builds correspond to the selected chain file (e.g. hg19 -> hg38 needs hg19ToHg38.over.chain).',
-        ]
-    } else if (msg =~ /(?i)chain.*not found|target_fasta.*not found/) {
-        code = 'MISSING_REFERENCE_FILE'
-        severity = 'pipeline_error'
-        summary = "A required reference file (chain or target FASTA) is missing from the workflow configuration."
-        remediation = [
-            kind: 'contact_support',
-            hint: 'This is a service-side configuration issue; the operator needs to fix the workflow configuration.',
-        ]
-    }
-
-    emitStructuredError([
-        code: code,
-        severity: severity,
-        summary: summary,
-        detail: msg.take(2000),
-        remediation: remediation,
-    ])
-}
