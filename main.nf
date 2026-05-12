@@ -264,30 +264,34 @@ include { LIFTOVER_WORKFLOW } from './workflows/liftover'
 ========================================================================================
 */
 
-// Bound without `def` so they become script-level globals visible
-// inside `resolveChainFile()` / `resolveTargetFasta()`. A top-level
-// `def` would scope them as locals that the functions can't see,
-// raising `No such property: CHAIN_FILES`.
-CHAIN_FILES = [
-    'hg17->hg18': 'hg17ToHg18.over.chain.gz',
-    'hg17->hg19': 'hg17ToHg19.over.chain.gz',
-    'hg18->hg19': 'hg18ToHg19.over.chain.gz',
-    'hg18->hg38': 'hg18ToHg38.over.chain.gz',
-    'hg19->hg18': 'hg19ToHg18.over.chain.gz',
-    'hg19->hg38': 'hg19ToHg38.over.chain.gz',
-    'hg38->hg19': 'hg38ToHg19.over.chain.gz',
-    'b37->hg38':  'b37ToHg38.over.chain.gz',
-]
-FASTA_FILES = [
-    'hg18': 'GRCh36/hg18.fasta',
-    'hg19': 'GRCh37/hg19.fasta',
-    'hg38': 'GRCh38/hg38.fasta',
-]
+// Lookup tables are inlined inside each helper function rather than
+// bound at script top-level. Three things ruled out the alternatives:
+//   - `def CHAIN_FILES = [...]` at top-level scopes them as locals
+//     that the helper functions can't see (`No such property: CHAIN_FILES`).
+//   - `CHAIN_FILES = [...]` at top-level (no `def`) creates a script
+//     binding visible to functions, but NF 26 strict mode rejects it
+//     with "Statements cannot be mixed with script declarations".
+//   - `@groovy.transform.Field def CHAIN_FILES = [...]` would work but
+//     pulls a Groovy meta-import into a Nextflow script that otherwise
+//     doesn't need it.
+// Inlining is duplicate ~12 lines per function but stays inside the
+// "script declarations only at top-level" rule that NF 26 enforces.
+// To add a new build pair, update BOTH functions below.
 
 def resolveChainFile() {
     if (params.chain_file) {
         return params.chain_file
     }
+    def CHAIN_FILES = [
+        'hg17->hg18': 'hg17ToHg18.over.chain.gz',
+        'hg17->hg19': 'hg17ToHg19.over.chain.gz',
+        'hg18->hg19': 'hg18ToHg19.over.chain.gz',
+        'hg18->hg38': 'hg18ToHg38.over.chain.gz',
+        'hg19->hg18': 'hg19ToHg18.over.chain.gz',
+        'hg19->hg38': 'hg19ToHg38.over.chain.gz',
+        'hg38->hg19': 'hg38ToHg19.over.chain.gz',
+        'b37->hg38':  'b37ToHg38.over.chain.gz',
+    ]
     def key = "${params.source_build}->${params.target_build}"
     def chain_name = CHAIN_FILES[key]
     if (!chain_name) {
@@ -305,6 +309,11 @@ def resolveTargetFasta() {
     if (params.target_fasta) {
         return params.target_fasta
     }
+    def FASTA_FILES = [
+        'hg18': 'GRCh36/hg18.fasta',
+        'hg19': 'GRCh37/hg19.fasta',
+        'hg38': 'GRCh38/hg38.fasta',
+    ]
     def fasta_name = FASTA_FILES[params.target_build]
     if (!fasta_name) {
         log.error "No reference FASTA registered for target_build " +
