@@ -62,7 +62,14 @@ jobs:
           test -f results/reports/liftover_summary_report.html || (echo "HTML report not found" && exit 1)
           test -f results/reports/sample_summary.csv || (echo "CSV report not found" && exit 1)
 
-          echo "✅ All expected outputs found!"
+          # Per-chromosome split is enabled in conf/test.config, so the
+          # per_chromosome/ directory must exist with at least one chr*.vcf.gz
+          # plus a .tbi index. Guards against regressions in SPLIT_BY_CHR.
+          test -d results/per_chromosome || (echo "per_chromosome dir not found" && exit 1)
+          ls results/per_chromosome/*.chr*.vcf.gz >/dev/null 2>&1 || (echo "No per-chromosome VCFs produced" && exit 1)
+          ls results/per_chromosome/*.chr*.vcf.gz.tbi >/dev/null 2>&1 || (echo "Per-chromosome VCFs missing tabix indices" && exit 1)
+
+          echo "All expected outputs found!"
 
       - name: Upload test results
         if: always()

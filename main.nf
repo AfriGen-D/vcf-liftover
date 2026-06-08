@@ -237,6 +237,98 @@ include { LIFTOVER_WORKFLOW } from './workflows/liftover'
 
 /*
 ========================================================================================
+    AUTO-DERIVATION TABLES FOR chain_file / target_fasta
+========================================================================================
+    Lookup tables consumed by `resolveChainFile()` / `resolveTargetFasta()`
+    below. To support a new build pair, drop the chain file in
+    `params.chain_files_dir`, the target FASTA in `params.fasta_files_dir`,
+    and add the mapping here.
+
+    These exist because the 2026-05-12 prod incident was caused by four
+    independent UI dropdowns (source_build, target_build, chain_file,
+    target_fasta) with no cross-validation: a `hg19 -> hg38` submission
+    inherited the legacy `hg38ToHg19` chain default and `hg19.fasta`
+    target reference, producing 270k MismatchedRefAllele rejections and
+    22 MB of silently-corrupt output. Deriving the two file paths from
+    the (source_build, target_build) pair makes the misconfiguration
+    unrepresentable.
+
+    Why a function rather than mutating `params.chain_file` at script
+    load: Nextflow 25.10.4 silently rejects in-script mutation of params
+    (even at script top level), so an assignment like
+    `params.chain_file = "..."` would log a non-null value but every
+    downstream read still sees null -- which is exactly how the
+    workflow ran at 13:42 UTC on 2026-05-12. The function returns the
+    resolved path; the workflow block uses the return value directly
+    via local variables instead of round-tripping through `params`.
+========================================================================================
+*/
+
+// Lookup tables are inlined inside each helper function rather than
+// bound at script top-level. Three things ruled out the alternatives:
+//   - `def CHAIN_FILES = [...]` at top-level scopes them as locals
+//     that the helper functions can't see (`No such property: CHAIN_FILES`).
+//   - `CHAIN_FILES = [...]` at top-level (no `def`) creates a script
+//     binding visible to functions, but NF 26 strict mode rejects it
+//     with "Statements cannot be mixed with script declarations".
+//   - `@groovy.transform.Field def CHAIN_FILES = [...]` would work but
+//     pulls a Groovy meta-import into a Nextflow script that otherwise
+//     doesn't need it.
+// Inlining is duplicate ~12 lines per function but stays inside the
+// "script declarations only at top-level" rule that NF 26 enforces.
+// To add a new build pair, update BOTH functions below.
+
+def resolveChainFile() {
+    if (params.chain_file) {
+        return params.chain_file
+    }
+    def CHAIN_FILES = [
+        'hg17->hg18': 'hg17ToHg18.over.chain.gz',
+        'hg17->hg19': 'hg17ToHg19.over.chain.gz',
+        'hg18->hg19': 'hg18ToHg19.over.chain.gz',
+        'hg18->hg38': 'hg18ToHg38.over.chain.gz',
+        'hg19->hg18': 'hg19ToHg18.over.chain.gz',
+        'hg19->hg38': 'hg19ToHg38.over.chain.gz',
+        'hg38->hg19': 'hg38ToHg19.over.chain.gz',
+        'b37->hg38':  'b37ToHg38.over.chain.gz',
+    ]
+    def key = "${params.source_build}->${params.target_build}"
+    def chain_name = CHAIN_FILES[key]
+    if (!chain_name) {
+        log.error "No chain file registered for build pair '${key}'. " +
+            "Supported pairs: ${CHAIN_FILES.keySet().sort().join(', ')}. " +
+            "Pass --chain_file explicitly or extend CHAIN_FILES in main.nf."
+        exit 1
+    }
+    def resolved = "${params.chain_files_dir}/${chain_name}"
+    log.info "Auto-derived chain_file for ${key}: ${resolved}"
+    return resolved
+}
+
+def resolveTargetFasta() {
+    if (params.target_fasta) {
+        return params.target_fasta
+    }
+    def FASTA_FILES = [
+        'hg18': 'GRCh36/hg18.fasta',
+        'hg19': 'GRCh37/hg19.fasta',
+        'hg38': 'GRCh38/hg38.fasta',
+    ]
+    def fasta_name = FASTA_FILES[params.target_build]
+    if (!fasta_name) {
+        log.error "No reference FASTA registered for target_build " +
+            "'${params.target_build}'. Supported targets: " +
+            "${FASTA_FILES.keySet().sort().join(', ')}."
+        exit 1
+    }
+    def resolved = "${params.fasta_files_dir}/${fasta_name}"
+    log.info "Auto-derived target_fasta for ${params.target_build}: ${resolved}"
+    return resolved
+}
+
+
+/*
+========================================================================================
     MAIN WORKFLOW
 ========================================================================================
 */
@@ -255,35 +347,42 @@ workflow {
         helpMessage()
         exit 1
     }
-    if (!params.chain_file) {
-        log.error "ERROR: --chain_file parameter is required"
-        helpMessage()
-        exit 1
-    }
-    if (!params.target_fasta) {
-        log.error "ERROR: --target_fasta parameter is required"
-        helpMessage()
-        exit 1
-    }
+
+    // Normalize the input into the comma-separated string the rest of the
+    // pipeline already understands. WES serializes a multi-file submission
+    // as a JSON array, so params.input arrives as a java.util.ArrayList; the
+    // string-only branches in validateInputFiles()/createInputChannel() and
+    // process_input.py would otherwise mis-route it (List.contains(',') tests
+    // membership, not substring) into the single-file path, where
+    // file([...]) throws "ArrayList.getFileSystem()". A plain string passes
+    // through unchanged.
+    def input_param = (params.input instanceof List) ? params.input.join(',') : params.input
+
+    // Resolve chain_file / target_fasta paths from the build pair when
+    // the caller did not provide them explicitly. Bound to local vars
+    // and passed through channels rather than mutating params, because
+    // Nextflow 25.10.4 silently drops in-script params mutation.
+    def resolved_chain_file = resolveChainFile()
+    def resolved_target_fasta = resolveTargetFasta()
 
     // Validate input files exist before starting workflow
-    def validation_error = validateInputFiles(params.input)
+    def validation_error = validateInputFiles(input_param)
     if (validation_error) {
         log.error "\n${validation_error}\n"
         exit 1
     }
 
     // Validate chain file exists
-    def chain_file_obj = file(params.chain_file)
+    def chain_file_obj = file(resolved_chain_file)
     if (!chain_file_obj.exists()) {
-        log.error formatFileNotFoundError(params.chain_file, "Chain file", workflow.launchDir)
+        log.error formatFileNotFoundError(resolved_chain_file, "Chain file", workflow.launchDir)
         exit 1
     }
 
     // Validate target FASTA exists
-    def target_fasta_obj = file(params.target_fasta)
+    def target_fasta_obj = file(resolved_target_fasta)
     if (!target_fasta_obj.exists()) {
-        log.error formatFileNotFoundError(params.target_fasta, "Target FASTA file", workflow.launchDir)
+        log.error formatFileNotFoundError(resolved_target_fasta, "Target FASTA file", workflow.launchDir)
         exit 1
     }
 
@@ -291,9 +390,9 @@ workflow {
     =========================================
      vcf-liftover v${workflow.manifest.version}
     =========================================
-    Input           : ${params.input}
-    Chain file      : ${params.chain_file}
-    Target FASTA    : ${params.target_fasta}
+    Input           : ${input_param}
+    Chain file      : ${resolved_chain_file}
+    Target FASTA    : ${resolved_target_fasta}
     Source build    : ${params.source_build}
     Target build    : ${params.target_build}
     Chr mapping     : ${params.chr_mapping ?: 'None'}
@@ -306,53 +405,109 @@ workflow {
     // Input channels are already created above
 
     // Prepare reference files
-    chain_file = file(params.chain_file)
-    target_fasta = file(params.target_fasta)
+    chain_file = file(resolved_chain_file)
+    target_fasta = file(resolved_target_fasta)
     chr_mapping = params.chr_mapping ? file(params.chr_mapping) : []
 
     // Run main liftover workflow
     LIFTOVER_WORKFLOW(
-        params.input,
+        input_param,
         chain_file,
         target_fasta,
         chr_mapping
     )
+
+    // Completion / error handlers must be defined INSIDE the entry workflow
+    // block under strict syntax (Nextflow 26+). A top-level
+    // `workflow.onComplete = { ... }` is rejected at compile time with
+    //   Error: Statements cannot be mixed with script declarations
+    // The assignment form is accepted by both the legacy parser (the pinned
+    // 25.04.8 runtime) and the strict parser -- see docs/migrations/25-10.md.
+    workflow.onComplete = {
+        log.info """
+        =========================================
+         Pipeline completed!
+        =========================================
+        Completed at : ${workflow.complete}
+        Duration     : ${workflow.duration}
+        Success      : ${workflow.success}
+        Work dir     : ${workflow.workDir}
+        Exit status  : ${workflow.exitStatus}
+        Error report : ${workflow.errorReport ?: 'None'}
+        =========================================
+        """.stripIndent()
+
+        if (workflow.success) {
+            log.info "Pipeline completed successfully!"
+            log.info "Results are in: ${params.outdir}"
+        } else {
+            log.error "Pipeline failed!"
+            log.error "Check the error report above for details"
+        }
+    }
+
+    workflow.onError = {
+        log.error "Pipeline failed with error: ${workflow.errorMessage}"
+
+        // Best-effort classification of the failure so the FedImpute UI can
+        // surface a meaningful code + remediation instead of a bare
+        // "EXECUTOR_ERROR". We look at the workflow error message text and,
+        // where the pattern is unambiguous, assign a specific code.
+        def msg = (workflow.errorMessage ?: '').toString()
+        def code = 'PIPELINE_FAILED'
+        def severity = 'pipeline_error'
+        def remediation = null
+        def summary = "vcf-liftover pipeline failed"
+
+        if (msg =~ /(?i)GENERATE_CHR_MAPPING.*exit status \(1\)/ ||
+            msg =~ /(?i)Could not extract chromosomes/) {
+            code = 'CHR_EXTRACTION_FAILED'
+            severity = 'user_error'
+            summary = "Could not extract chromosomes from the input VCF. The file may be truncated, missing an index, or in an unsupported format."
+            remediation = [
+                kind: 'retry',
+                hint: 'Verify the VCF opens with `bcftools view` locally, and that it has a .tbi or .csi index if gzipped. Then re-upload.',
+            ]
+        } else if (msg =~ /(?i)LIFTOVER.*exit status \(1\)/) {
+            code = 'LIFTOVER_FAILED'
+            severity = 'user_error'
+            summary = "Liftover process failed. This usually means the source build does not match the chain file."
+            remediation = [
+                kind: 'select_panel',
+                hint: 'Check that the source and target builds correspond to the selected chain file (e.g. hg19 -> hg38 needs hg19ToHg38.over.chain).',
+            ]
+        } else if (msg =~ /(?i)chain.*not found|target_fasta.*not found/) {
+            code = 'MISSING_REFERENCE_FILE'
+            severity = 'pipeline_error'
+            summary = "A required reference file (chain or target FASTA) is missing from the workflow configuration."
+            remediation = [
+                kind: 'contact_support',
+                hint: 'This is a service-side configuration issue; the operator needs to fix the workflow configuration.',
+            ]
+        }
+
+        emitStructuredError([
+            code: code,
+            severity: severity,
+            summary: summary,
+            detail: msg.take(2000),
+            remediation: remediation,
+        ])
+    }
 }
 
 /*
 ========================================================================================
-    WORKFLOW COMPLETION
+    HELPERS
 ========================================================================================
 */
-
-workflow.onComplete {
-    log.info """
-    =========================================
-     Pipeline completed!
-    =========================================
-    Completed at : ${workflow.complete}
-    Duration     : ${workflow.duration}
-    Success      : ${workflow.success}
-    Work dir     : ${workflow.workDir}
-    Exit status  : ${workflow.exitStatus}
-    Error report : ${workflow.errorReport ?: 'None'}
-    =========================================
-    """.stripIndent()
-    
-    if (workflow.success) {
-        log.info "Pipeline completed successfully!"
-        log.info "Results are in: ${params.outdir}"
-    } else {
-        log.error "Pipeline failed!"
-        log.error "Check the error report above for details"
-    }
-}
 
 // Emit a structured error descriptor under `${params.logs}/fedimpute_error.json`
 // (see docs/PIPELINE_ERROR_SCHEMA.md in the fedimpute repo). The FedImpute
 // backend reads this file via the WES outputs endpoint and renders a typed
 // error UI with a remediation button; if the file is absent the backend
-// falls back to parsing stdout.
+// falls back to parsing stdout. A top-level function (a declaration), so it
+// is callable from the onError handler above regardless of definition order.
 def emitStructuredError(Map err) {
     try {
         // Prefer params.logs (checkref-style), then params.outdir/logs, then launchDir/logs
@@ -372,53 +527,4 @@ def emitStructuredError(Map err) {
     } catch (Exception e) {
         log.warn "Failed to write fedimpute_error.json: ${e.message}"
     }
-}
-
-workflow.onError {
-    log.error "Pipeline failed with error: ${workflow.errorMessage}"
-
-    // Best-effort classification of the failure so the FedImpute UI can
-    // surface a meaningful code + remediation instead of a bare
-    // "EXECUTOR_ERROR". We look at the workflow error message text and,
-    // where the pattern is unambiguous, assign a specific code.
-    def msg = (workflow.errorMessage ?: '').toString()
-    def code = 'PIPELINE_FAILED'
-    def severity = 'pipeline_error'
-    def remediation = null
-    def summary = "vcf-liftover pipeline failed"
-
-    if (msg =~ /(?i)GENERATE_CHR_MAPPING.*exit status \(1\)/ ||
-        msg =~ /(?i)Could not extract chromosomes/) {
-        code = 'CHR_EXTRACTION_FAILED'
-        severity = 'user_error'
-        summary = "Could not extract chromosomes from the input VCF. The file may be truncated, missing an index, or in an unsupported format."
-        remediation = [
-            kind: 'retry',
-            hint: 'Verify the VCF opens with `bcftools view` locally, and that it has a .tbi or .csi index if gzipped. Then re-upload.',
-        ]
-    } else if (msg =~ /(?i)LIFTOVER.*exit status \(1\)/) {
-        code = 'LIFTOVER_FAILED'
-        severity = 'user_error'
-        summary = "Liftover process failed. This usually means the source build does not match the chain file."
-        remediation = [
-            kind: 'select_panel',
-            hint: 'Check that the source and target builds correspond to the selected chain file (e.g. hg19 -> hg38 needs hg19ToHg38.over.chain).',
-        ]
-    } else if (msg =~ /(?i)chain.*not found|target_fasta.*not found/) {
-        code = 'MISSING_REFERENCE_FILE'
-        severity = 'pipeline_error'
-        summary = "A required reference file (chain or target FASTA) is missing from the workflow configuration."
-        remediation = [
-            kind: 'contact_support',
-            hint: 'This is a service-side configuration issue; the operator needs to fix the workflow configuration.',
-        ]
-    }
-
-    emitStructuredError([
-        code: code,
-        severity: severity,
-        summary: summary,
-        detail: msg.take(2000),
-        remediation: remediation,
-    ])
 }
