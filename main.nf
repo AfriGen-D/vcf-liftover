@@ -348,6 +348,16 @@ workflow {
         exit 1
     }
 
+    // Normalize the input into the comma-separated string the rest of the
+    // pipeline already understands. WES serializes a multi-file submission
+    // as a JSON array, so params.input arrives as a java.util.ArrayList; the
+    // string-only branches in validateInputFiles()/createInputChannel() and
+    // process_input.py would otherwise mis-route it (List.contains(',') tests
+    // membership, not substring) into the single-file path, where
+    // file([...]) throws "ArrayList.getFileSystem()". A plain string passes
+    // through unchanged.
+    def input_param = (params.input instanceof List) ? params.input.join(',') : params.input
+
     // Resolve chain_file / target_fasta paths from the build pair when
     // the caller did not provide them explicitly. Bound to local vars
     // and passed through channels rather than mutating params, because
@@ -356,7 +366,7 @@ workflow {
     def resolved_target_fasta = resolveTargetFasta()
 
     // Validate input files exist before starting workflow
-    def validation_error = validateInputFiles(params.input)
+    def validation_error = validateInputFiles(input_param)
     if (validation_error) {
         log.error "\n${validation_error}\n"
         exit 1
@@ -380,7 +390,7 @@ workflow {
     =========================================
      vcf-liftover v${workflow.manifest.version}
     =========================================
-    Input           : ${params.input}
+    Input           : ${input_param}
     Chain file      : ${resolved_chain_file}
     Target FASTA    : ${resolved_target_fasta}
     Source build    : ${params.source_build}
@@ -401,7 +411,7 @@ workflow {
 
     // Run main liftover workflow
     LIFTOVER_WORKFLOW(
-        params.input,
+        input_param,
         chain_file,
         target_fasta,
         chr_mapping
