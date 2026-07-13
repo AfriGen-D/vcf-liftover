@@ -38,9 +38,15 @@ process SPLIT_BY_CHR {
     # record count is non-zero.
     tabix --list-chroms ${vcf} > all_chroms.txt
     : > chroms_with_data.txt
+    # Compute per-contig record counts ONCE into a file. awk then reads from
+    # that file, so its early `exit` can't SIGPIPE an upstream process:
+    # piping `bcftools index --stats | awk '...exit'` under `set -o pipefail`
+    # sent SIGPIPE to bcftools (exit 141) on large/dense files where it was
+    # still writing when awk exited -- aborting the whole run. Reading from a
+    # file also avoids re-running bcftools once per chromosome.
+    bcftools index --stats ${vcf} > index_stats.txt
     while read chr; do
-        # bcftools index --stats returns per-seq record counts; filter empty
-        n=\$(bcftools index --stats ${vcf} | awk -v c="\$chr" -F'\\t' '\$1==c {print \$3; exit}')
+        n=\$(awk -v c="\$chr" -F'\\t' '\$1==c {print \$3; exit}' index_stats.txt)
         if [ -n "\$n" ] && [ "\$n" != "0" ]; then
             echo "\$chr" >> chroms_with_data.txt
         fi
